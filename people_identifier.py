@@ -34,7 +34,18 @@ def get_relatives(person_main, people):
         if person_main['pid']!=person['pid']:
             # Here there should be some code which determines the reletives and their connections
             # Right now we only have edges without edge labels
-            relatives.append({'pid':person['pid']})
+            if person_main['RelationType'] == 'Vader' or person_main['RelationType'] == 'Man':
+                if person['RelationType'] == 'Moeder':
+                    person['RelationType'] = 'Vrouw'
+            if person_main['RelationType'] == 'Moeder' or person_main['RelationType'] == 'Vrouw':
+                if person['RelationType'] == 'Vader':
+                    person['RelationType'] = 'Man'
+            if person_main['RelationType'] == 'Kind' and person_main['Gender'] == 'Man':
+                person_main['RelationType'] = 'Zoon'
+            if person_main['RelationType'] == 'Kind' and person_main['Gender'] == 'Vrouw':
+                person_main['RelationType'] = 'Dochter'
+            relatives.append({'pid':person['pid'],
+                              'RelationType':person['RelationType']})
     person_main['relatives'] = relatives
 
 def remove_people_indexes():
@@ -80,7 +91,7 @@ def analyze_people(people, relationEP, Source):
             if 'pid' not in people[n] and 'PersonKeyRef' in relation:
                 people[n]['pid'] = relation['PersonKeyRef']
             elif 'pid' in people[n] and 'PersonKeyRef' not in relation:
-                relation['PersonKeyRef'] = people[n]['pid']
+                relation['PersonKeyRef'] = peopleT[n]['pid']
             elif 'pid' not in people[n] and 'PersonKeyRef' not in relation:
                 # Delete person if there are no id's
                 del people[n]
