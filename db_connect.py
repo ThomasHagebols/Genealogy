@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from config import *
 from pymongo import MongoClient
+from bson.objectid import ObjectId
+import pprint
+
+pp = pprint.PrettyPrinter(indent=2)
 
 # Connect to the database
 def mongo_connect():
@@ -27,6 +31,21 @@ def mongo_connect():
     'pop_resisters':pop_resisters, 'military':military, 'prison':prison}
 
     return client, bhic, source_collections, people
+
+# Query all collections in the "source_collections" dictionary
+def query_all_source_collections(query, nr_results, verbose):
+    client, bhic, source_collections, people = mongo_connect()
+
+    for collection in source_collections:
+        if verbose == True:
+            for n, document in enumerate(source_collections[collection].find(query)):
+                pp.pprint(document)
+
+                if n>nr_results:
+                    break
+
+        print("# records in", collection, source_collections[collection].find(query).count())
+
 
 if __name__ == "__main__":
     client, bhic, source_collections, people = mongo_connect()
