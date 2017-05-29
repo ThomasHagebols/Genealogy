@@ -19,18 +19,19 @@ def mongo_connect():
     deaths = bhic['civil-status-deaths']
     death_actions = bhic['dtb-death-actions']
     succession = bhic['memories-of-succession']
-    pop_resisters = bhic['genealogical-population-registers']
+    pop_registers = bhic['genealogical-population-registers']
     military = bhic['military-register']
     prison = bhic['prision-register']
     people = bhic['people']
+    errors = bhic['people']
 
     # Dict containing all collections of the original data source (as imported)
     source_collections = {'births':births, 'baptisms':baptisms,
     'marriage_acts':marriage_acts, 'marriage_actions':marriage_actions,
     'deaths':deaths, 'death_actions':death_actions, 'succession':succession,
-    'pop_resisters':pop_resisters, 'military':military, 'prison':prison}
+    'pop_registers':pop_registers, 'military':military, 'prison':prison}
 
-    return client, bhic, source_collections, people
+    return client, bhic, source_collections, people, errors
 
 # Query all collections in the "source_collections" dictionary
 def query_all_source_collections(query, nr_results, verbose):
@@ -48,7 +49,7 @@ def query_all_source_collections(query, nr_results, verbose):
 
 
 if __name__ == "__main__":
-    client, bhic, source_collections, people = mongo_connect()
+    client, bhic, source_collections, people, errors = mongo_connect()
 
     # test by counting # records in each collection
     for collection in source_collections:

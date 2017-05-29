@@ -5,6 +5,8 @@ from collections import defaultdict
 import pprint
 
 pp = pprint.PrettyPrinter(indent=2)
+subsample = False
+sample_size = 10
 
 # This script tries to find if a person is male or female
 def gender_identifier(person):
@@ -30,23 +32,50 @@ def analyze_person(person):
 
 def get_relatives(person_main, people):
     relatives = []
-    for person in people:
-        if person_main['pid']!=person['pid']:
-            # Here there should be some code which determines the reletives and their connections
-            # Right now we only have edges without edge labels
-            if person_main['RelationType'] == 'Vader' or person_main['RelationType'] == 'Man':
-                if person['RelationType'] == 'Moeder':
-                    person['RelationType'] = 'Vrouw'
-            if person_main['RelationType'] == 'Moeder' or person_main['RelationType'] == 'Vrouw':
-                if person['RelationType'] == 'Vader':
-                    person['RelationType'] = 'Man'
-            if person_main['RelationType'] == 'Kind' and person_main['Gender'] == 'Man':
-                person_main['RelationType'] = 'Zoon'
-            if person_main['RelationType'] == 'Kind' and person_main['Gender'] == 'Vrouw':
-                person_main['RelationType'] = 'Dochter'
-            relatives.append({'pid':person['pid'],
-                              'RelationType':person['RelationType']})
-    person_main['relatives'] = relatives
+    for relative in people:
+        # Check if the relative and the main person are not the same
+        if person_main['pid']!=relative['pid']:
+            relative['Relation'] = 'No useful relation'
+
+            # Kids and deceased have no outgoing edges
+            if person_main in ['Kind', 'Overledene', 'Geregistreerde']:
+                break
+
+            # Esteblish couples
+            if person_main['RelationType'] == 'Vader' and relative['RelationType'] == 'Moeder':
+                relative['Relation'] = 'HasChildWith'
+            if person_main['RelationType'] == 'Bruidegom' and relative['RelationType'] == 'Bruid':
+                relative['Relation'] = 'MarriedTo'
+            if person_main['RelationType'] == 'Vader van de bruidegom' and relative['RelationType'] == 'Moeder van de bruidegom':
+                relative['Relation'] = 'HasChildWith'
+            if person_main['RelationType'] == 'Vader van de bruid' and relative['RelationType'] == 'Moeder van de bruid':
+                relative['Relation'] = 'HasChildWith'
+
+            # Establish parent child relationships in marriages
+            if person_main['RelationType'] == 'Vader van de bruidegom' and relative['RelationType'] == 'Bruidegom':
+                relative['Relation'] = 'FatherOf'
+            if person_main['RelationType'] == 'Moeder van de bruidegom' and relative['RelationType'] == 'Bruidegom':
+                relative['Relation'] = 'MotherOf'
+            if person_main['RelationType'] == 'Vader van de bruid' and relative['RelationType'] == 'Bruid':
+                relative['Relation'] = 'FatherOf'
+            if person_main['RelationType'] == 'Moeder van de bruid' and relative['RelationType'] == 'Bruid':
+                relative['Relation'] = 'MotherOf'
+
+            # Establish parent child relationships for births
+            if person_main['RelationType'] == 'Vader' and relative['RelationType'] in ['Kind', 'Overledene']:
+                relative['Relation'] = 'FatherOf'
+            if person_main['RelationType'] == 'Moeder' and relative['RelationType'] in ['Kind', 'Overledene']:
+                relative['Relation'] = 'MotherOf'
+
+            # TODO Establish withness (Getuige) relations for  Mariage_actions and baptisms
+
+            if relative['Relation'] != 'No useful relation':
+                relatives.append({'pid':relative['pid'],
+                                  'Relation':relative['Relation']})
+            del relative['Relation']
+    # Only include relatives list if it contains elements
+    if relatives:
+        person_main['relatives'] = relatives
 
 def remove_people_indexes():
     try:
@@ -61,12 +90,10 @@ def rebuild_people_indexes():
     people.create_indexes([index_pid, index_lastname])
 
 
-
-
 def analyze_people(people, relationEP, Source):
     analyzed_people = []
     # Check how many people we have as input
-    if isinstance(people,dict):
+    if isinstance(people,dict) and isinstance(relationEP,dict):
         # We have a single person as input
         people['RelationType'] = relationEP['RelationType']
         people['Source'] = Source
@@ -74,11 +101,17 @@ def analyze_people(people, relationEP, Source):
         # get_approx_age
         analyzed_people = [people]
     else:
-        # We have multiple people as input
+        # We have multiple people or multiple relations as input
+        # Convert possible dicts to lists
+        if isinstance(people,dict):
+            people = [people]
+        if isinstance(relationEP,dict):
+            relationEP = [relationEP]
+
         # Check if both the people list and the relationEP list have the same length
         if len(people)!=len(relationEP):
             print(len(people), len(relationEP))
-            input("Press Enter to continue...")
+            # input("Press Enter to continue...")
 
             return analyzed_people
 
@@ -101,7 +134,6 @@ def analyze_people(people, relationEP, Source):
 
         # Join temp with people
         # TODO What if pid doesn't exist?
-
         d = defaultdict(dict)
         for l in (people, temp):
             for elem in l:
@@ -113,12 +145,14 @@ def analyze_people(people, relationEP, Source):
             analyze_person(person)
             get_relatives(person, people)
             person['Source'] = Source
+            # TODO uncomment this thing when we have finished debugging
+            # del person['RelationType']
             analyzed_people.append(person)
 
     return analyzed_people
 
 if __name__ == "__main__":
-    client, bhic, source_collections, people = mongo_connect()
+    client, bhic, source_collections, people, errors = mongo_connect()
 
     print("-----Do you really want to overwrite the people collection?-----")
     input("Press Enter to continue...")
@@ -135,28 +169,36 @@ if __name__ == "__main__":
     # Loop over all collections containing information
     for collection in source_collections:
         # For all items in the current selection
-        print(collection)
         for n, document in enumerate(source_collections[collection].find()):
-            print(document['_id'])
+            if subsample == True and n == sample_size:
+                break
+
+            if n%20==0:
+                print(collection)
+                print('Current collection:', collection, 'Opetation:', n)
+
+            print(document['header']['identifier'])
 
             # Check if there are people in this document
             analyzed_people = []
             if 'Person' in document and 'RelationEP' in document:
-                Source = {'SourceId':document['_id'], 'Collection':collection}
+                Source = {'SourceHeaderIdentifier':document['header']['identifier'], 'Collection':collection}
                 if 'EventDate' in document['Event']:
                     Source['EventDate'] = document['Event']['EventDate']
 
                 analyzed_people = analyze_people(document['Person'], document['RelationEP'], Source)
 
             for analyzed_person in analyzed_people:
-                if 'pid' in analyzed_person:
-                    analyzed_person['_id'] = analyzed_person['pid']
-                # Use insert_one for easier debugging
-                people.insert_one(analyzed_person)
+                try:
+                    if 'pid' in analyzed_person:
+                        analyzed_person['_id'] = analyzed_person['pid']
+                    # Use insert_one for easier debugging
+                    people.insert_one(analyzed_person)
+                except:
+                    del analyzed_person['_id']
+                    people.insert_one(analyzed_person)
             # people.insert_many(analyzed_people)
-            if n%20==0:
-                print(collection)
-                print('Current collection:', collection, 'Opetation:', n)
+
 
     # Rebuild indexes
     rebuild_people_indexes()
