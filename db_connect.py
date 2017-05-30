@@ -23,6 +23,7 @@ def mongo_connect():
     military = bhic['military-register']
     prison = bhic['prision-register']
     people = bhic['people']
+    people_debug = bhic['people-debug']
     errors = bhic['people']
 
     # Dict containing all collections of the original data source (as imported)
@@ -31,29 +32,31 @@ def mongo_connect():
     'deaths':deaths, 'death_actions':death_actions, 'succession':succession,
     'pop_registers':pop_registers, 'military':military, 'prison':prison}
 
-    return client, bhic, source_collections, people, errors
+    return {'client': client, 'bhic': bhic,
+            'source_collections': source_collections,
+            'people':people, 'people_debug': people_debug, 'errors': errors}
 
 # Query all collections in the "source_collections" dictionary
 def query_all_source_collections(query, nr_results, verbose):
-    client, bhic, source_collections, people = mongo_connect()
+    mc = mongo_connect()
 
-    for collection in source_collections:
+    for collection in mc['source_collections']:
         if verbose == True:
-            for n, document in enumerate(source_collections[collection].find(query)):
+            for n, document in enumerate(mc['source_collections'][collection].find(query)):
                 pp.pprint(document)
 
                 if n>nr_results:
                     break
 
-        print("# records in", collection, source_collections[collection].find(query).count())
+        print("# records in", collection, mc['source_collections'][collection].find(query).count())
 
 
 if __name__ == "__main__":
-    client, bhic, source_collections, people, errors = mongo_connect()
+    mc = mongo_connect()
 
     # test by counting # records in each collection
-    for collection in source_collections:
+    for collection in mc['source_collections']:
         # print(type(collection))
-        print("# records in", collection, source_collections[collection].count())
+        print("# records in", collection, mc['source_collections'][collection].count())
 
-    print("# records in people", people.count())
+    print("# records in people", mc['people'].count())

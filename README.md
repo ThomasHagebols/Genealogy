@@ -41,13 +41,13 @@ You can connect to the mongodb using db_connect.py with the following snippit
 ```python
 from db_connect import mongo_connect
 
-client, bhic, source_collections, people = mongo_connect()
+mc = mongo_connect()
 ```
 
 example of a query which counts all documents in a collection
 
 ```python
-for collection in source_collections:
-    print("# records in", collection, source_collections[collection].find({}).count())
+for collection in mc['source_collections']:
+    print("# records in", collection, mc['source_collections'][collection].find({}).count())
 
 ```

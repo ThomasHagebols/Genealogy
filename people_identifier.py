@@ -1,11 +1,12 @@
 from db_connect import mongo_connect
 from bson.objectid import ObjectId
-from pymongo import IndexModel
+from pymongo import IndexModel, ASCENDING, DESCENDING
 from collections import defaultdict
 import pprint
 
 pp = pprint.PrettyPrinter(indent=2)
-subsample = False
+debugging = True
+subsample = True
 sample_size = 10
 
 # This script tries to find if a person is male or female
@@ -68,6 +69,10 @@ def get_relatives(person_main, people):
                 relative['Relation'] = 'MotherOf'
 
             # TODO Establish withness (Getuige) relations for  Mariage_actions and baptisms
+            # TODO add "other:Eerdere vrouw", "other:Eerdere man", marriage_actions
+            # TODO add husband or wife of the deceased in marriage_acts
+            # TODO add 'weduwe van Willem Janssen' in deaths
+
 
             if relative['Relation'] != 'No useful relation':
                 relatives.append({'pid':relative['pid'],
@@ -78,16 +83,30 @@ def get_relatives(person_main, people):
         person_main['relatives'] = relatives
 
 def remove_people_indexes():
+    mc = mongo_connect()
+
     try:
-        people.drop_indexes()
+        mc['people'].drop_indexes()
     except:
         print('Index not available')
-    print("All documents in people collection have been removed")
+    print("All indexes in people collection have been removed")
 
 def rebuild_people_indexes():
-    index_pid = IndexModel('pid', name='_pid')
-    index_lastname = IndexModel('PersonName.PersonNameLastName', name= '_LastName')
-    people.create_indexes([index_pid, index_lastname])
+    mc = mongo_connect()
+
+    indexes = []
+    # indexes.append(IndexModel('pid', name='_pid'))
+    indexes.append(IndexModel('PersonName.PersonNameLastName', name= '_LastName'))
+    indexes.append(IndexModel('PersonName.PersonNameFirstName', name= '_FirstName'))
+    indexes.append(IndexModel('BirthPlace', name= '_BirthPlace'))
+    # indexes.append(IndexModel('BirthDate', name= '_BirthDate'))
+
+    indexes.append(IndexModel([('BirthDate.Year', ASCENDING),
+                        ('BirthDate.Month', ASCENDING),
+                        ('BirthDate.Day', ASCENDING)],
+                        name="_BirthDate"))
+
+    mc['people'].create_indexes(indexes)
 
 
 def analyze_people(people, relationEP, Source):
@@ -152,11 +171,14 @@ def analyze_people(people, relationEP, Source):
     return analyzed_people
 
 if __name__ == "__main__":
-    client, bhic, source_collections, people, errors = mongo_connect()
+    mc = mongo_connect()
+
+    if debugging == True:
+        mc['people'] = mc['people_debug']
 
     print("-----Do you really want to overwrite the people collection?-----")
     input("Press Enter to continue...")
-    people.remove()
+    mc['people'].drop()
 
     # Remove indices to speed up the inserts
     remove_people_indexes()
@@ -167,9 +189,9 @@ if __name__ == "__main__":
     # run multiple collections in parrallel
 
     # Loop over all collections containing information
-    for collection in source_collections:
+    for collection in mc['source_collections']:
         # For all items in the current selection
-        for n, document in enumerate(source_collections[collection].find()):
+        for n, document in enumerate(mc['source_collections'][collection].find()):
             if subsample == True and n == sample_size:
                 break
 
@@ -177,7 +199,8 @@ if __name__ == "__main__":
                 print(collection)
                 print('Current collection:', collection, 'Opetation:', n)
 
-            print(document['header']['identifier'])
+            if debugging == True:
+                print(document['header']['identifier'])
 
             # Check if there are people in this document
             analyzed_people = []
@@ -189,16 +212,15 @@ if __name__ == "__main__":
                 analyzed_people = analyze_people(document['Person'], document['RelationEP'], Source)
 
             for analyzed_person in analyzed_people:
+                if 'pid' in analyzed_person:
+                    analyzed_person['_id'] = analyzed_person['pid']
                 try:
-                    if 'pid' in analyzed_person:
-                        analyzed_person['_id'] = analyzed_person['pid']
                     # Use insert_one for easier debugging
-                    people.insert_one(analyzed_person)
+                    mc['people'].insert_one(analyzed_person)
                 except:
                     del analyzed_person['_id']
-                    people.insert_one(analyzed_person)
-            # people.insert_many(analyzed_people)
-
+                    errors.insert_one(analyzed_person)
+            # mc['people'].insert_many(analyzed_people)
 
     # Rebuild indexes
     rebuild_people_indexes()
