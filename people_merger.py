@@ -46,6 +46,17 @@ def merge_people():
             BirthDay = person['BirthDate']['Day']
             query['BirthDate.Day'] = BirthDay
 
-        print(query)
+        #print(query)
+
+        #Find all the records according to the query
+        results = mc['people'].find(query)
+
+        #Empty array to store the pids of the records found by the query
+        pids = []
+
+        #Fill the 'pids' array with records found by query
+        for doc in results:
+            pids.append(doc['_id'])
+        print(pids)
 
 merge_people()
