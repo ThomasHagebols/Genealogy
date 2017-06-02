@@ -6,8 +6,8 @@ import pprint
 
 pp = pprint.PrettyPrinter(indent=2)
 debugging = False
-subsample = True
-sample_size = 300000
+subsample = False
+sample_size = 10
 
 # This script tries to find if a person is male or female
 def gender_identifier(person):
@@ -130,24 +130,25 @@ def analyze_people(people, relationEP, Source):
 
         # Check if both the people list and the relationEP list have the same length
         if len(people)!=len(relationEP):
-            print(len(people), len(relationEP))
-            # input("Press Enter to continue...")
+            if debugging == True:
+                print(len(people), len(relationEP))
+                # input("Press Enter to continue...")
 
             return analyzed_people
 
         # Make temp containing tuples of {pid:, RelationType:}
         temp = []
-        for n, relation in enumerate(relationEP):
+        for m, relation in enumerate(relationEP):
             # TODO Check if there is a better solution? Maybe ommit the join altogether?
             # Old code might be better see previous commit
             # Breaks with deaths
-            if 'pid' not in people[n] and 'PersonKeyRef' in relation:
-                people[n]['pid'] = relation['PersonKeyRef']
-            elif 'pid' in people[n] and 'PersonKeyRef' not in relation:
-                relation['PersonKeyRef'] = peopleT[n]['pid']
-            elif 'pid' not in people[n] and 'PersonKeyRef' not in relation:
+            if 'pid' not in people[m] and 'PersonKeyRef' in relation:
+                people[m]['pid'] = relation['PersonKeyRef']
+            elif 'pid' in people[m] and 'PersonKeyRef' not in relation:
+                relation['PersonKeyRef'] = peopleT[m]['pid']
+            elif 'pid' not in people[m] and 'PersonKeyRef' not in relation:
                 # Delete person if there are no id's
-                del people[n]
+                del people[m]
 
             temp.append({'pid':relation['PersonKeyRef'],
             'RelationType':relation['RelationType']})
@@ -196,7 +197,7 @@ if __name__ == "__main__":
             if subsample == True and n == sample_size:
                 break
 
-            if n%20==0:
+            if n%100==0:
                 print(collection)
                 print('Current collection:', collection, 'Opetation:', n)
 
