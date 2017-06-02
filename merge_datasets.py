@@ -8,7 +8,7 @@ import threading
 import time
 
 debugging = False
-subsample = True
+subsample = False
 sample_size = 100000
 
 pp = pprint.PrettyPrinter(indent=2)
@@ -171,7 +171,6 @@ def process_collection(thrdName, collection):
 
         # Once in a 100 inserts do a print statement
         if n%10000==0:
-            print(collection)
             print('Current collection:', collection, 'Opetation:', n, 'on ', thrdName)
 
         if debugging == True:
@@ -179,7 +178,7 @@ def process_collection(thrdName, collection):
 
         # Write stack to db and empty the stack afterwards
         if len(stack)>20000:
-            print('Writing collection: ', collection, 'untill Opetation:', n, 'on ', thrdName)
+            print('Writing collection:', collection, 'untill Opetation:', n, 'on', thrdName)
             save_to_db(stack, mc['people'])
             stack = []
 
