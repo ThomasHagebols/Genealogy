@@ -3,11 +3,39 @@ from bson.objectid import ObjectId
 from pymongo import IndexModel, ASCENDING, DESCENDING
 from collections import defaultdict
 import pprint
+import queue
+import threading
+import time
+
+debugging = False
+subsample = True
+sample_size = 100000
 
 pp = pprint.PrettyPrinter(indent=2)
-debugging = False
-subsample = False
-sample_size = 10
+exitFlag = 0
+
+# Define thread
+class myThread(threading.Thread):
+    def __init__(self, threadID, name, q):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.q = q
+    def run(self):
+        print("Starting " + self.name)
+        process_collections(self.name, self.q)
+        print("Exiting " + self.name)
+
+def process_collections(threadName, q):
+    while not exitFlag:
+        queueLock.acquire()
+        if not workQueue.empty():
+            queue_item = q.get()
+            queueLock.release()
+            process_collection(threadName, queue_item)
+        else:
+            queueLock.release()
+            time.sleep(1)
 
 # This script tries to find if a person is male or female
 def gender_identifier(person):
@@ -83,7 +111,6 @@ def get_relatives(person_main, people):
         person_main['relatives'] = relatives
 
 def remove_people_indexes():
-    mc = mongo_connect()
 
     try:
         mc['people'].drop_indexes()
@@ -91,9 +118,7 @@ def remove_people_indexes():
     except:
         print('Index not available')
 
-
 def rebuild_people_indexes():
-    mc = mongo_connect()
 
     indexes = []
     # indexes.append(IndexModel('pid', name='_pid'))
@@ -109,6 +134,59 @@ def rebuild_people_indexes():
 
     mc['people'].create_indexes(indexes)
 
+def save_to_db(stck, collect):
+    # Try to replace the people in the table with
+    try:
+        collect.insert_many(stck)
+        print('Batch write successful')
+    except:
+        for people in stack:
+            del people['_id']
+        mc['errors'].insert_many(stck)
+
+
+# Process collections
+def process_collection(thrdName, collection):
+    # For all items in the current selection
+    stack = []
+    for n, document in enumerate(mc['source_collections'][collection].find()):
+        if subsample == True and n == sample_size:
+            break
+
+        # Check if there are people in this document
+        analyzed_people = []
+        if 'Person' in document and 'RelationEP' in document:
+            Source = {'SourceHeaderIdentifier':document['header']['identifier'], 'Collection':collection}
+            if 'EventDate' in document['Event']:
+                Source['EventDate'] = document['Event']['EventDate']
+
+            analyzed_people = analyze_people(document['Person'], document['RelationEP'], Source)
+
+        # Set pid as _id
+        for analyzed_person in analyzed_people:
+            if 'pid' in analyzed_person:
+                analyzed_person['_id'] = analyzed_person['pid']
+
+            stack.append(analyzed_person)
+
+        # Once in a 100 inserts do a print statement
+        if n%10000==0:
+            print(collection)
+            print('Current collection:', collection, 'Opetation:', n, 'on ', thrdName)
+
+        if debugging == True:
+            print(document['header']['identifier'])
+
+        # Write stack to db and empty the stack afterwards
+        if len(stack)>20000:
+            print('Writing collection: ', collection, 'untill Opetation:', n, 'on ', thrdName)
+            save_to_db(stack, mc['people'])
+            stack = []
+
+    # Write out the rest of the stack remaining after the for loop
+    if stack:
+        save_to_db(stack, mc['people'])
+        stack = []
 
 def analyze_people(people, relationEP, Source):
     analyzed_people = []
@@ -186,43 +264,38 @@ if __name__ == "__main__":
     remove_people_indexes()
     input("Press Enter to continue...")
 
-    # TODO Low prio make loop multi threaded
-    # Build stack containing collections
-    # run multiple collections in parrallel
+    # Setup for multi-threading
+    threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4", "Thread-5", "Thread-6", "Thread-7", "Thread-8"]
+    queueLock = threading.Lock()
+    workQueue = queue.Queue()
+    threads = []
+    threadID = 1
 
-    # Loop over all collections containing information
+    # Create new threads
+    for tName in threadList:
+        thread = myThread(threadID, tName, workQueue)
+        thread.start()
+        threads.append(thread)
+        threadID += 1
+
+    # Fill the queue with collections containing information
+    queueLock.acquire()
     for collection in mc['source_collections']:
-        # For all items in the current selection
-        for n, document in enumerate(mc['source_collections'][collection].find()):
-            if subsample == True and n == sample_size:
-                break
+        workQueue.put(collection)
+    queueLock.release()
 
-            if n%100==0:
-                print(collection)
-                print('Current collection:', collection, 'Opetation:', n)
+    # Wait for queue to empty
+    while not workQueue.empty():
+        pass
 
-            if debugging == True:
-                print(document['header']['identifier'])
+    # Notify threads it's time to exit
+    exitFlag = 1
 
-            # Check if there are people in this document
-            analyzed_people = []
-            if 'Person' in document and 'RelationEP' in document:
-                Source = {'SourceHeaderIdentifier':document['header']['identifier'], 'Collection':collection}
-                if 'EventDate' in document['Event']:
-                    Source['EventDate'] = document['Event']['EventDate']
-
-                analyzed_people = analyze_people(document['Person'], document['RelationEP'], Source)
-
-            for analyzed_person in analyzed_people:
-                if 'pid' in analyzed_person:
-                    analyzed_person['_id'] = analyzed_person['pid']
-                try:
-                    # Use insert_one for easier debugging
-                    mc['people'].insert_one(analyzed_person)
-                except:
-                    del analyzed_person['_id']
-                    mc['errors'].insert_one(analyzed_person)
-            # mc['people'].insert_many(analyzed_people)
+    # Wait for all threads to complete
+    for t in threads:
+        t.join()
 
     # Rebuild indexes
     rebuild_people_indexes()
+
+    print("Exiting Main Thread")
