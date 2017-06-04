@@ -24,7 +24,7 @@ def mongo_connect():
     prison = bhic['prision-register']
     people = bhic['people']
     people_debug = bhic['people-debug']
-    errors = bhic['people']
+    errors = bhic['errors']
 
     # Dict containing all collections of the original data source (as imported)
     source_collections = {'births':births, 'baptisms':baptisms,

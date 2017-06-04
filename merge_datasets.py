@@ -9,10 +9,15 @@ import time
 
 debugging = False
 subsample = False
-sample_size = 100000
+sample_size = 100
 
 pp = pprint.PrettyPrinter(indent=2)
 exitFlag = 0
+
+if debugging == True:
+    write_table = 'people_debug'
+else:
+    write_table = 'people'
 
 # Define thread
 class myThread(threading.Thread):
@@ -111,9 +116,8 @@ def get_relatives(person_main, people):
         person_main['relatives'] = relatives
 
 def remove_people_indexes():
-
     try:
-        mc['people'].drop_indexes()
+        mc[write_table].drop_indexes()
         print("All indexes in people collection have been removed")
     except:
         print('Index not available')
@@ -125,6 +129,8 @@ def rebuild_people_indexes():
     indexes.append(IndexModel('PersonName.PersonNameLastName', name= '_LastName'))
     indexes.append(IndexModel('PersonName.PersonNameFirstName', name= '_FirstName'))
     indexes.append(IndexModel('BirthPlace', name= '_BirthPlace'))
+    indexes.append(IndexModel('relatives.pid', name= '_RelativesPid'))
+
     # indexes.append(IndexModel('BirthDate', name= '_BirthDate'))
 
     indexes.append(IndexModel([('BirthDate.Year', ASCENDING),
@@ -132,17 +138,26 @@ def rebuild_people_indexes():
                         ('BirthDate.Day', ASCENDING)],
                         name="_BirthDate"))
 
-    mc['people'].create_indexes(indexes)
+    mc[write_table].create_indexes(indexes)
 
-def save_to_db(stck, collect):
-    # Try to replace the people in the table with
+def save_to_db(stck):
     try:
-        collect.insert_many(stck)
-        print('Batch write successful')
+         mc[write_table].insert_many(stck)
     except:
-        for people in stack:
-            del people['_id']
-        mc['errors'].insert_many(stck)
+        # Try one by one insertion
+        for person in stck:
+            try:
+                 mc[write_table].insert_one(person)
+            except:
+                # If one by one fails try removing the id's and inserting it into the errors table
+                try:
+                    print(person)
+                    del person['_id']
+                    mc['errors'].insert_one(stck)
+                except:
+                    person['no_pid'] = True
+                    mc['errors'].insert_one(stck)
+        print('Wrote batch with some errors')
 
 
 # Process collections
@@ -170,21 +185,22 @@ def process_collection(thrdName, collection):
             stack.append(analyzed_person)
 
         # Once in a 100 inserts do a print statement
-        if n%10000==0:
+        if n%50000==0:
             print('Current collection:', collection, 'Opetation:', n, 'on ', thrdName)
 
         if debugging == True:
             print(document['header']['identifier'])
 
         # Write stack to db and empty the stack afterwards
-        if len(stack)>20000:
+        if len(stack)>50000:
             print('Writing collection:', collection, 'untill Opetation:', n, 'on', thrdName)
-            save_to_db(stack, mc['people'])
+            save_to_db(stack)
             stack = []
 
     # Write out the rest of the stack remaining after the for loop
     if stack:
-        save_to_db(stack, mc['people'])
+        print('Final write on collection:', collection, 'on', thrdName)
+        save_to_db(stack)
         stack = []
 
 def analyze_people(people, relationEP, Source):
@@ -252,19 +268,20 @@ def analyze_people(people, relationEP, Source):
 if __name__ == "__main__":
     mc = mongo_connect()
 
-    if debugging == True:
-        mc['people'] = mc['people_debug']
-
     print("-----Do you really want to overwrite the people collection?-----")
     input("Press Enter to continue...")
-    mc['people'].drop()
+    mc[write_table].drop()
 
     # Remove indices to speed up the inserts
     remove_people_indexes()
     input("Press Enter to continue...")
 
     # Setup for multi-threading
-    threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4", "Thread-5", "Thread-6", "Thread-7", "Thread-8"]
+    if debugging == True:
+        threadList = ["Thread-1"]
+    else:
+        threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4", "Thread-5", "Thread-6", "Thread-7", "Thread-8"]
+
     queueLock = threading.Lock()
     workQueue = queue.Queue()
     threads = []
