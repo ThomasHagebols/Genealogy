@@ -23,7 +23,7 @@ def mongo_connect():
     military = bhic['military-register']
     prison = bhic['prision-register']
     people = bhic['people']
-    people_debug = bhic['people-debug']
+    people_debug = bhic['people_debug']
     errors = bhic['errors']
 
     # Dict containing all collections of the original data source (as imported)
