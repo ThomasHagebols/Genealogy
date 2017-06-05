@@ -6,8 +6,8 @@ debugging = True
 pp = pprint.PrettyPrinter(indent=2)
 
 if debugging == True:
-    read_table = 'people'
-    write_table = 'people'
+    read_table = 'people_debug'
+    write_table = 'people_debug'
 else:
     read_table = 'people'
     write_table = 'people'
@@ -57,7 +57,11 @@ def remove_links_to_old_pid(pid1, pid2):
 
             print(personWithDangingLinks['relatives'])
 
-            mc[write_table].find_one_and_update({'_id':personWithDangingLinks['_id']},
+        # Remove duplicates
+        # TODO Check if this works correctly
+        personWithDangingLinks['relatives'] = [dict(tpl) for tpl in set([tuple(dct.items()) for dct in personWithDangingLinks['relatives']])]
+
+        mc[write_table].find_one_and_update({'_id':personWithDangingLinks['_id']},
                                                 {'$set':{'relatives':personWithDangingLinks['relatives']}})
 
 def merge_person(pid1, pid2):
@@ -97,8 +101,12 @@ def merge_person(pid1, pid2):
     # TODO Keep the most complete record
     person_merged = {}
     for key in both:
-        if key == 'Source':
-            person_merged[key] = [person1[key], person2[key]]
+        if key == 'Sources':
+            for source in person1[key]:
+                person_merged[key].append(source)
+
+            for source in person2[key]:
+                person_merged[key].append(source)
         elif key == 'Gender':
             if person1[key] == 'Onbekend':
                 person_merged[key] = person2[key]
@@ -138,6 +146,8 @@ def merge_person(pid1, pid2):
     # Find if there are relations with multiple pid's and check if they are the same person
     relatives_with_multiple_pids = relation_checker(person_merged['relatives'])
 
+    # TODO Remove duplicates
+
     # Recurse merge_person
     for relative in relatives_with_multiple_pids:
         merge_person(relative[0], relative[1])
@@ -147,5 +157,5 @@ if __name__ == "__main__":
     personID1 = 'Person:2eaf362c-4630-11e3-a747-d206bceb4d38'
     # pid1 = 'Person:68a683c0-4631-11e3-a747-d206bceb4d38'
     personID2 = 'Person:68a683c0-4631-11e3-a747-d206bceb4d38'
-
+    
     merge_person(personID1, personID2)

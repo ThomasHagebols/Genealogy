@@ -2,6 +2,7 @@ from db_connect import mongo_connect
 from bson.objectid import ObjectId
 from pymongo import IndexModel, ASCENDING, DESCENDING
 from collections import defaultdict
+from datetime import datetime
 import pprint
 import queue
 import threading
@@ -10,6 +11,8 @@ import time
 debugging = False
 subsample = False
 sample_size = 100
+batch_size = 50000
+print_interval = 100000
 
 pp = pprint.PrettyPrinter(indent=2)
 exitFlag = 0
@@ -70,9 +73,10 @@ def get_relatives(person_main, people):
         # Check if the relative and the main person are not the same
         if person_main['pid']!=relative['pid']:
             relative['Relation'] = 'No useful relation'
+            relative['temporaryRelation'] = False
 
             # Kids and deceased have no outgoing edges
-            if person_main in ['Kind', 'Overledene', 'Geregistreerde']:
+            if person_main in ['Geregistreerde']:
                 break
 
             # Esteblish couples
@@ -106,10 +110,40 @@ def get_relatives(person_main, people):
             # TODO add husband or wife of the deceased in marriage_acts
             # TODO add 'weduwe van Willem Janssen' in deaths
 
+            # All usefull relations for NEO4j are processed before this point
+            if relative['Relation'] != 'No useful relation':
+                relative['temporaryRelation'] = True
+
+            # Estabilsh temp relations for preprocessing
+            # Esteblish couples
+            if person_main['RelationType'] == 'Moeder' and relative['RelationType'] == 'Vader':
+                relative['Relation'] = 'HasChildWith'
+            if person_main['RelationType'] == 'Bruid' and relative['RelationType'] == 'Bruidegom':
+                relative['Relation'] = 'MarriedTo'
+            if person_main['RelationType'] == 'Moeder van de bruidegom' and relative['RelationType'] == 'Vader van de bruidegom':
+                relative['Relation'] = 'HasChildWith'
+            if person_main['RelationType'] == 'Moeder van de bruid' and relative['RelationType'] == 'Vader van de bruid':
+                relative['Relation'] = 'HasChildWith'
+
+            # Establish parent child relationships in marriages
+            if person_main['RelationType'] == 'Bruidegom' and relative['RelationType'] == 'Vader van de bruidegom':
+                relative['Relation'] = 'ChildOf'
+            if person_main['RelationType'] == 'Bruidegom' and relative['RelationType'] == 'Moeder van de bruidegom':
+                relative['Relation'] = 'ChildOf'
+            if person_main['RelationType'] == 'Bruid' and relative['RelationType'] == 'Vader van de bruid':
+                relative['Relation'] = 'ChildOf'
+            if person_main['RelationType'] == 'Bruid' and relative['RelationType'] == 'Moeder van de bruid':
+                relative['Relation'] = 'ChildOf'
+
+            # Establish parent child relationships for births
+            if person_main['RelationType'] in ['Kind', 'Overledene'] and relative['RelationType'] == 'Vader':
+                relative['Relation'] = 'ChildOf'
+            if person_main['RelationType'] in ['Kind', 'Overledene'] and relative['RelationType'] == 'Moeder':
+                relative['Relation'] = 'ChildOf'
 
             if relative['Relation'] != 'No useful relation':
                 relatives.append({'pid':relative['pid'],
-                                  'Relation':relative['Relation']})
+                                  'Relation':relative['Relation'], 'temporaryRelation':relative['temporaryRelation']})
             del relative['Relation']
     # Only include relatives list if it contains elements
     if relatives:
@@ -118,7 +152,7 @@ def get_relatives(person_main, people):
 def remove_people_indexes():
     try:
         mc[write_table].drop_indexes()
-        print("All indexes in people collection have been removed")
+        print("All indexes in", write_table, "collection have been removed")
     except:
         print('Index not available')
 
@@ -159,6 +193,27 @@ def save_to_db(stck):
                     mc['errors'].insert_one(stck)
         print('Wrote batch with some errors')
 
+def date_formatter(dictionary):
+    if 'Year' in dictionary:
+        try:
+            year = int(dictionary['Year'])
+
+            if 'Month' in dictionary:
+                month = int(dictionary['Month'])
+            else:
+                month = 1
+
+            if 'Day' in dictionary:
+                day = int(dictionary['Day'])
+            else:
+                day = 1
+            Date = datetime(year, month, day)
+
+            return {'Year': year, 'Month': month, 'Day': day, 'date': Date}
+        except:
+            return dictionary
+    else:
+        return dictionary
 
 # Process collections
 def process_collection(thrdName, collection):
@@ -173,7 +228,11 @@ def process_collection(thrdName, collection):
         if 'Person' in document and 'RelationEP' in document:
             Source = {'SourceHeaderIdentifier':document['header']['identifier'], 'Collection':collection}
             if 'EventDate' in document['Event']:
-                Source['EventDate'] = document['Event']['EventDate']
+                # Add date type
+                Source['EventDate'] = date_formatter(document['Event']['EventDate'])
+
+            if 'To' in document.get('Source',{}).get('SourceIndexDate', {}):
+                Source['SourceIndexDate'] = document['Source']['SourceIndexDate']
 
             analyzed_people = analyze_people(document['Person'], document['RelationEP'], Source)
 
@@ -185,14 +244,14 @@ def process_collection(thrdName, collection):
             stack.append(analyzed_person)
 
         # Once in a 100 inserts do a print statement
-        if n%50000==0:
+        if n%print_interval==0:
             print('Current collection:', collection, 'Opetation:', n, 'on ', thrdName)
 
-        if debugging == True:
-            print(document['header']['identifier'])
+        # if debugging == True:
+        #     print(document['header']['identifier'])
 
         # Write stack to db and empty the stack afterwards
-        if len(stack)>50000:
+        if len(stack)>batch_size:
             print('Writing collection:', collection, 'untill Opetation:', n, 'on', thrdName)
             save_to_db(stack)
             stack = []
@@ -209,7 +268,7 @@ def analyze_people(people, relationEP, Source):
     if isinstance(people,dict) and isinstance(relationEP,dict):
         # We have a single person as input
         people['RelationType'] = relationEP['RelationType']
-        people['Source'] = Source
+        people['Sources'] = [Source]
         analyze_person(people)
         # get_approx_age
         analyzed_people = [people]
@@ -223,8 +282,9 @@ def analyze_people(people, relationEP, Source):
 
         # Check if both the people list and the relationEP list have the same length
         if len(people)!=len(relationEP):
-            if debugging == True:
-                print(len(people), len(relationEP))
+            # TODO Check if lengths do not match
+            # if debugging == True:
+            #     print(len(people), len(relationEP))
                 # input("Press Enter to continue...")
 
             return analyzed_people
@@ -259,6 +319,14 @@ def analyze_people(people, relationEP, Source):
             analyze_person(person)
             get_relatives(person, people)
             person['Source'] = Source
+
+            # Flatten personName
+            for name_parts in person['PersonName']:
+                person.update({name_parts:person['PersonName'][name_parts]})
+            del person['PersonName']
+
+            #
+
             # TODO uncomment this thing when we have finished debugging
             # del person['RelationType']
             analyzed_people.append(person)
@@ -268,7 +336,7 @@ def analyze_people(people, relationEP, Source):
 if __name__ == "__main__":
     mc = mongo_connect()
 
-    print("-----Do you really want to overwrite the people collection?-----")
+    print("-----Do you really want to overwrite the", write_table,"collection?-----")
     input("Press Enter to continue...")
     mc[write_table].drop()
 
