@@ -48,21 +48,26 @@ def merge_people():
                
             #Find optional fields
             optional = {}
-
+            #print(person['_id'])
 
             if person.get('PersonNamePrefixLastName') != None:
                 optional['PersonNamePrefixLastName'] = person['PersonNamePrefixLastName']
+                #print(optional['PersonNamePrefixLastName'])
 
             if person.get('BirthPlace') != None:
                 optional['BirthPlace.Place'] = person['BirthPlace'].get('Place')
+                #print(optional['BirthPlace.Place'])
 
             if person.get('Residence') != None:
                 optional['Residence.Place'] = person['Residence'].get('Place')
-            
+                #print(optional['Residence.Place']) 
+
             if person.get('PersonNamePatronym') != None:
                 optional['PersonNamePatronym'] = person.get('PersonNamePatronym')
-
-
+                #print(optional['PersonNamePatronym'])
+            #if (len(optional)>1):
+                #print(len(optional))
+            
             #Find all the records according to the query
             results = mc['people'].find(query)
 
@@ -77,6 +82,10 @@ def merge_people():
                 score = 0
                 #Check if any optional fields match. Give score for matches
                 for key, value in optional.items():
+                    #if (len(optional)>1):
+                        #print("key: ",key)
+                        #print("values: ", value, doc.get(key))
+                        #print("PIDS: ",person['_id'] , doc['_id'])
                     if doc.get(key) == value:
                         score+=1
                 pids.append(doc['_id'])
@@ -85,6 +94,6 @@ def merge_people():
             #print(pids, scores)
             for p,s in zip(pids,scores):
                 q.put((s,person.get('_id'),p))
-                if (s>0):
-                    print(person.get('_id'),pids, scores)
+                print(person.get('_id'),pids, scores)
+
 merge_people()
