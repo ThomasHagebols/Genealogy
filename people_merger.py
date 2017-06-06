@@ -23,7 +23,7 @@ def merge_people():
         BirthDate = person.get('BirthDate')
         
         #If we don't have all the mandatory fields, we go to next loop iteration. Otherwise we start to build query
-        if None not in (CheckFirstName, CheckLastName, CheckBirthDate):
+        if None not in (FirstName, LastName, BirthDate):
 
             #--add Mandatory fields--
             
