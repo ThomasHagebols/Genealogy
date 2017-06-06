@@ -185,7 +185,7 @@ def save_to_db(stck):
             except:
                 # If one by one fails try removing the id's and inserting it into the errors table
                 try:
-                    print(person['_id'], person['Source']['Collection'])
+                    # print(person['_id'], person['Source']['Collection'])
                     del person['_id']
                     mc['errors'].insert_one(person)
                 except:
@@ -339,6 +339,7 @@ if __name__ == "__main__":
     print("-----Do you really want to overwrite the", write_table,"collection?-----")
     input("Press Enter to continue...")
     mc[write_table].drop()
+    mc['errors'].drop()
 
     # Remove indices to speed up the inserts
     remove_people_indexes()
