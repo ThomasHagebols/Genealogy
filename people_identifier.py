@@ -1,14 +1,13 @@
 from db_connect import mongo_connect
-import pickle
 import people_merger
 import pprint
-import queue as queue
+import json
 
-debugging = True
+debugging = False
 
-output = open('data.pkl', 'wb')
 pp = pprint.PrettyPrinter(indent=2)
-q = queue.PriorityQueue()
+
+a = []
 
 if debugging == True:
     read_table = 'people_debug'
@@ -41,9 +40,9 @@ def identify_people():
         #CheckBirthDate becomes None if 'BirthDate' does not exist
         BirthDate = person.get('BirthDate')
 
-        #If we don't have all the mandatory fields, we go to next loop iteration. Otherwise we start to build query
+        #If we don't have all the mandatory fields, we go to next loop iteration.
+        #Otherwise we start to build query
         if None not in (FirstName, LastName, BirthDate):
-
 
             #--add Mandatory fields--
 
@@ -61,53 +60,27 @@ def identify_people():
 
             #add Birthyear to the query
             query['BirthDate.Day'] = person['BirthDate'].get('Day')
-
-
-            #Find optional fields
-            optional = {}
-
-
-            if person.get('PersonNamePrefixLastName') != None:
-                optional['PersonNamePrefixLastName'] = person['PersonNamePrefixLastName']
-
-            if person.get('BirthPlace') != None:
-                optional['BirthPlace.Place'] = person['BirthPlace'].get('Place')
-
-            if person.get('Residence') != None:
-                optional['Residence.Place'] = person['Residence'].get('Place')
-
-            if person.get('PersonNamePatronym') != None:
-                optional['PersonNamePatronym'] = person.get('PersonNamePatronym')
-
-
+            
             #Find all the records according to the query
             results = mc[read_table].find(query)
 
             #Empty array to store the pids of the records found by the query
             pids = []
+            
+            #append persons ID to first index of list
+            pids.append(person['_id'])
 
-            #Empty array to store the scores of the records
-            scores = []
-
-            #Loop results
+            #Loop results. Add pids to pid list
             for doc in results:
-                score = 0
-                #Check if any optional fields match. Give score for matches
-                for key, value in optional.items():
-                    if doc.get(key) == value:
-                        score+=1
                 if doc['_id'] != person['_id']:
                     pids.append(doc['_id'])
-                    scores.append(score)
-
-            #print(pids, scores)
-            # scored_pid_pair = []
-            for p,s in zip(pids,scores):
-                q.put([s,person.get('_id'),p])
-                if (s>0):
-                    print(person.get('_id'),pids, scores)
-
-            # pickle.dumps(scored_pid_pair, output)
+            
+            #make sure that dublicates are not writen to main array        
+            if (len(pids)>1):
+                a.append(pids)
 
 if __name__ == "__main__":
     identify_people()
+
+    with open('matches.json', 'w') as outfile:
+        json.dump(a, outfile)
