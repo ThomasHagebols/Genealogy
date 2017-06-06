@@ -1,8 +1,9 @@
 from db_connect import mongo_connect
+import json
 import itertools
 import pprint
 
-debugging = True
+debugging = False
 dry_run = False
 pp = pprint.PrettyPrinter(indent=2)
 
@@ -10,8 +11,8 @@ if debugging == True:
     read_table = 'people_debug'
     write_table = 'people_debug'
 else:
-    read_table = 'people'
-    write_table = 'people'
+    read_table = 'people_debug'
+    write_table = 'people_debug'
 
 # TODO Lock documents before writing
 
@@ -90,7 +91,7 @@ def merge_person(pid1, pid2):
     if None in [person1, person2]:
         return
 
-    print('Main person:', person1['PersonNameLastName'], person1['PersonNameLastName'])
+    print('Main person:', person1['PersonNameLastName'], person1['PersonNameFirstName'])
     # Check where the information is contained person1 ->left, person2 -> right
     both = []
     left = []
@@ -162,7 +163,15 @@ def merge_person(pid1, pid2):
 
 def process_pid_group(group):
     while len(group) > 1:
-        personID1 = person[0]
-        personID2 = person[1]
+        personID1 = group[0]
+        personID2 = group[1]
         merge_person(personID1, personID2)
-        del person[1]
+        del group[1]
+
+if __name__ == "__main__":
+    with open('matches.json') as data_file:
+        data = json.load(data_file)
+
+    for count, d in enumerate(data):
+        print(count)
+        process_pid_group(d)
