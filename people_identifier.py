@@ -81,5 +81,3 @@ def identify_people():
 if __name__ == "__main__":
     identify_people()
 
-    with open('matches_full.json', 'w') as outfile:
-        json.dump(a, outfile)
