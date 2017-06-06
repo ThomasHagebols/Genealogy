@@ -1,6 +1,6 @@
 from db_connect import mongo_connect
 import pprint
-#from queue import *
+#import queue as queue
 
 pp = pprint.PrettyPrinter(indent=2)
 
@@ -79,7 +79,7 @@ def merge_people():
             for doc in results:
                 score = 0
                 #Check if any optional fields match. Give score for matches
-                for key, value in optional.iteritems():
+                for key, value in optional.items():
                     if doc.get(key) == value:
                         score+=1
                 pids.append(doc['_id'])
