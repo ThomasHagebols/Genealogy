@@ -1,7 +1,10 @@
 from db_connect import mongo_connect
 import pprint
+#from queue import *
 
 pp = pprint.PrettyPrinter(indent=2)
+
+#q = queue.PriorityQueue()
 
 def merge_people():
     mc = mongo_connect()
@@ -21,17 +24,17 @@ def merge_people():
 
         #CheckBirthDate becomes None if 'BirthDate' does not exist
         BirthDate = person.get('BirthDate')
-        
+	        
         #If we don't have all the mandatory fields, we go to next loop iteration. Otherwise we start to build query
         if None not in (FirstName, LastName, BirthDate):
-
+	    
             #--add Mandatory fields--
             
             #add LastName to the query
-            query['PersonName.PersonNameLastName'] = LastName
+            query['PersonNameLastName'] = LastName
 
             #add FirstName to the query
-            query['PersonName.PersonNameFirstName'] = FirstName
+            query['PersonNameFirstName'] = FirstName
 
             #add BirthYear to the query
             query['BirthDate.Year'] = person['BirthDate'].get('Year')
@@ -62,9 +65,6 @@ def merge_people():
             if person.get('PersonNamePatronym') != None:
                 optional['PersonNamePatronym'] = person.get('PersonNamePatronym')
 
-            if person.get('Age') != None:
-                optional['Age.PersonAgeLiteral'] = person['Age'].get('PersonAgeLiteral')
-
 
             #Find all the records according to the query
             results = mc['people'].find(query)
@@ -82,7 +82,7 @@ def merge_people():
                 for key, value in optional.iteritems():
                     if doc.get(key) == value:
                         score+=1
-                pids.append(doc[_id])
+                pids.append(doc['_id'])
                 scores.append(score)
             
             print(pids, scores)
