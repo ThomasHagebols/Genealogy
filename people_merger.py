@@ -11,52 +11,80 @@ def merge_people():
         #start with an empty query
         query = {}
 
+        #Get values of mandatory fields
+        
         #CheckLastName becomes None if 'PersonNameLastName' does not exist
-        CheckLastName = person['PersonName'].get('PersonNameLastName')
-
-        #If 'PersonNameLastName' exists
-        if CheckLastName != None:
-
-            #add LastName to the query
-            LastName = person['PersonName']['PersonNameLastName']
-            query['PersonName.PersonNameLastName'] = LastName
-
+        LastName = person.get('PersonNameLastName')
+        
         #CheckFirstName becomes None if 'PersonNameFirstName' does not exist
-        CheckFirstName = person['PersonName'].get('PersonNameFirstName')
-
-        #If 'PersonNameFirstName' exists
-        if CheckFirstName != None:
-
-            #add FirstName to the query
-            FirstName = person['PersonName']['PersonNameFirstName']
-            query['PersonName.PersonNameFirstName'] = FirstName
+        FirstName = person.get('PersonNameFirstName')
 
         #CheckBirthDate becomes None if 'BirthDate' does not exist
-        CheckBirthDate = person.get('BirthDate')
+        BirthDate = person.get('BirthDate')
+        
+        #If we don't have all the mandatory fields, we go to next loop iteration. Otherwise we start to build query
+        if None not in (CheckFirstName, CheckLastName, CheckBirthDate):
 
-        #If 'BirthDate' exists
-        if CheckBirthDate != None:
-            BirthYear = person['BirthDate']['Year']
-            query['BirthDate.Year'] = BirthYear
+            #--add Mandatory fields--
+            
+            #add LastName to the query
+            query['PersonName.PersonNameLastName'] = LastName
+
+            #add FirstName to the query
+            query['PersonName.PersonNameFirstName'] = FirstName
+
+            #add BirthYear to the query
+            query['BirthDate.Year'] = person['BirthDate'].get('Year')
 
             #add BirthMonth to the query
-            BirthMonth = person['BirthDate']['Month']
-            query['BirthDate.Month'] = BirthMonth
+            query['BirthDate.Month'] = person['BirthDate'].get('Month')
 
-            BirthDay = person['BirthDate']['Day']
-            query['BirthDate.Day'] = BirthDay
+            #add Birthyear to the query
+            query['BirthDate.Day'] = person['BirthDate'].get('Day')
+        
+               
+            #Find optional fields
+            optional = {}
 
-        #print(query)
 
-        #Find all the records according to the query
-        results = mc['people'].find(query)
+            if person.get('PersonNamePrefixLastName') != None:
+                optional['PersonNamePrefixLastName'] = person.['PersonNamePrefixLastName']
 
-        #Empty array to store the pids of the records found by the query
-        pids = []
+            if person.get('BirthPlace') != None:
+                optional['BirthPlace.Place'] = person['BirthPlace'].get('Place')i
 
-        #Fill the 'pids' array with records found by query
-        for doc in results:
-            pids.append(doc['_id'])
-        print(pids)
+            if person.get('Residence') != None:
+                optional['Residence.Place'] = person['Residence'].get('Place')i
+            
+            if person.get('Age') != None:
+                optional['Age.PersonAgeLiteral'] = person['Age'].get('PersonAgeLiteral')
+
+            if person.get('PersonNamePatronym') != None:
+                optional['PersonNamePatronym'] = person.get('PersonNamePatronym'))
+
+            if person.get('Age') != None:
+                optional['Age.PersonAgeLiteral'] = person['Age'].get('PersonAgeLiteral')
+
+
+            #Find all the records according to the query
+            results = mc['people'].find(query)
+
+            #Empty array to store the pids of the records found by the query
+            pids = []
+
+            #Empty array to store the scores of the records
+            scores = []
+
+            #Loop results
+            for doc in results:
+                score = 0
+                #Check if any optional fields match. Give score for matches
+                for key, value in optional.iteritems():
+                    if doc.get(key) == value:
+                        score+=1
+                pids.append(doc[_id])
+                scores.append(score)
+            
+            print(pids, scores)
 
 merge_people()
