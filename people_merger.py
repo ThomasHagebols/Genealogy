@@ -159,3 +159,4 @@ if __name__ == "__main__":
     personID2 = 'Person:68a683c0-4631-11e3-a747-d206bceb4d38'
     
     merge_person(personID1, personID2)
+
