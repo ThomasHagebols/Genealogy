@@ -9,7 +9,7 @@ q = queue.PriorityQueue()
 def merge_people():
     mc = mongo_connect()
 
-    for person in mc['people_debug'].find({}):
+    for person in mc['people'].find({}):
 
         #start with an empty query
         query = {}
@@ -59,9 +59,6 @@ def merge_people():
             if person.get('Residence') != None:
                 optional['Residence.Place'] = person['Residence'].get('Place')
             
-            if person.get('Age') != None:
-                optional['Age.PersonAgeLiteral'] = person['Age'].get('PersonAgeLiteral')
-
             if person.get('PersonNamePatronym') != None:
                 optional['PersonNamePatronym'] = person.get('PersonNamePatronym')
 
@@ -85,8 +82,9 @@ def merge_people():
                 pids.append(doc['_id'])
                 scores.append(score)
             
-            print(pids, scores)
+            #print(pids, scores)
             for p,s in zip(pids,scores):
                 q.put((s,person.get('_id'),p))
-
+                if (s>0):
+                    print(person.get('_id'),pids, scores)
 merge_people()
