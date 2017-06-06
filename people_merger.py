@@ -161,9 +161,18 @@ def merge_person(pid1, pid2):
         merge_person(relative[0], relative[1])
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     for person in test:
         while len(person) > 1:
             personID1 = person[0]
             personID2 = person[1]
             merge_person(personID1, personID2)
             del person[1]
+=======
+    personID1 = 'Person:2eaf362c-4630-11e3-a747-d206bceb4d38'
+    # pid1 = 'Person:68a683c0-4631-11e3-a747-d206bceb4d38'
+    personID2 = 'Person:68a683c0-4631-11e3-a747-d206bceb4d38'
+    
+    merge_person(personID1, personID2)
+
+>>>>>>> origin/master
