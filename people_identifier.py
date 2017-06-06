@@ -2,12 +2,13 @@ from db_connect import mongo_connect
 import people_merger
 import pprint
 import json
+import queue as queue
 
 debugging = False
 
 pp = pprint.PrettyPrinter(indent=2)
 
-a = []
+q = queue.PriorityQueue()
 
 if debugging == True:
     read_table = 'people_debug'
@@ -22,9 +23,6 @@ def identify_people():
     for n, person in enumerate(mc[read_table].find({})):
         if n%100000==0:
             print(n)
-
-        if n > 1000000:
-            break
 
         #start with an empty query
         query = {}
@@ -77,10 +75,11 @@ def identify_people():
             
             #make sure that dublicates are not writen to main array        
             if (len(pids)>1):
-                a.append(pids)
+                print(1.0/len(pids))
+                q.put((1.0/len(pids),pids))
 
 if __name__ == "__main__":
     identify_people()
 
-    with open('matches.json', 'w') as outfile:
+    with open('matches_full.json', 'w') as outfile:
         json.dump(a, outfile)
