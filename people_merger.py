@@ -12,24 +12,24 @@ def merge_people():
         query = {}
 
         #CheckLastName becomes None if 'PersonNameLastName' does not exist
-        CheckLastName = person['PersonName'].get('PersonNameLastName')
+        CheckLastName = person.get('PersonNameLastName')
 
         #If 'PersonNameLastName' exists
         if CheckLastName != None:
 
             #add LastName to the query
-            LastName = person['PersonName']['PersonNameLastName']
-            query['PersonName.PersonNameLastName'] = LastName
+            LastName = person['PersonNameLastName']
+            query['PersonNameLastName'] = LastName
 
         #CheckFirstName becomes None if 'PersonNameFirstName' does not exist
-        CheckFirstName = person['PersonName'].get('PersonNameFirstName')
+        CheckFirstName = person.get('PersonNameFirstName')
 
         #If 'PersonNameFirstName' exists
         if CheckFirstName != None:
 
             #add FirstName to the query
-            FirstName = person['PersonName']['PersonNameFirstName']
-            query['PersonName.PersonNameFirstName'] = FirstName
+            FirstName = person['PersonNameFirstName']
+            query['PersonNameFirstName'] = FirstName
 
         #CheckBirthDate becomes None if 'BirthDate' does not exist
         CheckBirthDate = person.get('BirthDate')
