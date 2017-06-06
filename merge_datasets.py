@@ -185,12 +185,12 @@ def save_to_db(stck):
             except:
                 # If one by one fails try removing the id's and inserting it into the errors table
                 try:
-                    print(person)
+                    print(person['_id'], person['Source']['Collection'])
                     del person['_id']
-                    mc['errors'].insert_one(stck)
+                    mc['errors'].insert_one(person)
                 except:
                     person['no_pid'] = True
-                    mc['errors'].insert_one(stck)
+                    mc['errors'].insert_one(person)
         print('Wrote batch with some errors')
 
 def date_formatter(dictionary):
@@ -348,7 +348,7 @@ if __name__ == "__main__":
     if debugging == True:
         threadList = ["Thread-1"]
     else:
-        threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4", "Thread-5", "Thread-6", "Thread-7", "Thread-8"]
+        threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4", "Thread-5", "Thread-6", "Thread-7", "Thread-8", "Thread-9", "Thread-10"]
 
     queueLock = threading.Lock()
     workQueue = queue.Queue()
