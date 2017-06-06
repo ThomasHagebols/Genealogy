@@ -48,19 +48,19 @@ def merge_people():
 
 
             if person.get('PersonNamePrefixLastName') != None:
-                optional['PersonNamePrefixLastName'] = person.['PersonNamePrefixLastName']
+                optional['PersonNamePrefixLastName'] = person['PersonNamePrefixLastName']
 
             if person.get('BirthPlace') != None:
-                optional['BirthPlace.Place'] = person['BirthPlace'].get('Place')i
+                optional['BirthPlace.Place'] = person['BirthPlace'].get('Place')
 
             if person.get('Residence') != None:
-                optional['Residence.Place'] = person['Residence'].get('Place')i
+                optional['Residence.Place'] = person['Residence'].get('Place')
             
             if person.get('Age') != None:
                 optional['Age.PersonAgeLiteral'] = person['Age'].get('PersonAgeLiteral')
 
             if person.get('PersonNamePatronym') != None:
-                optional['PersonNamePatronym'] = person.get('PersonNamePatronym'))
+                optional['PersonNamePatronym'] = person.get('PersonNamePatronym')
 
             if person.get('Age') != None:
                 optional['Age.PersonAgeLiteral'] = person['Age'].get('PersonAgeLiteral')
