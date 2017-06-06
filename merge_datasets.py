@@ -268,7 +268,6 @@ def analyze_people(people, relationEP, Source):
     if isinstance(people,dict) and isinstance(relationEP,dict):
         # We have a single person as input
         people['RelationType'] = relationEP['RelationType']
-        people['Sources'] = [Source]
         analyze_person(people)
         # get_approx_age
         analyzed_people = [people]
@@ -318,7 +317,7 @@ def analyze_people(people, relationEP, Source):
         for person in people:
             analyze_person(person)
             get_relatives(person, people)
-            person['Source'] = Source
+            person['Sources'] = [Source]
 
             # Flatten personName
             for name_parts in person['PersonName']:
