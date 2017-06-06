@@ -1,15 +1,15 @@
 from db_connect import mongo_connect
 import pprint
-#import queue as queue
+import queue as queue
 
 pp = pprint.PrettyPrinter(indent=2)
 
-#q = queue.PriorityQueue()
+q = queue.PriorityQueue()
 
 def merge_people():
     mc = mongo_connect()
 
-    for person in mc['people'].find({}):
+    for person in mc['people_debug'].find({}):
 
         #start with an empty query
         query = {}
@@ -86,5 +86,7 @@ def merge_people():
                 scores.append(score)
             
             print(pids, scores)
+            for p,s in zip(pids,scores):
+                q.put((s,person.get('_id'),p))
 
 merge_people()
