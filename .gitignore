@@ -90,3 +90,6 @@ ENV/
 
 # Password files
 config.py
+
+# Exclude PyCharm stuff
+.idea/

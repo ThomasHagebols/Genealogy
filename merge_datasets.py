@@ -11,7 +11,7 @@ import time
 debugging = False
 subsample = False
 sample_size = 100
-batch_size = 50000
+batch_size = 5000
 print_interval = 100000
 
 pp = pprint.PrettyPrinter(indent=2)
@@ -73,7 +73,6 @@ def get_relatives(person_main, people):
         # Check if the relative and the main person are not the same
         if person_main['pid']!=relative['pid']:
             relative['Relation'] = 'No useful relation'
-            relative['temporaryRelation'] = False
 
             # Kids and deceased have no outgoing edges
             if person_main in ['Geregistreerde']:
@@ -111,8 +110,10 @@ def get_relatives(person_main, people):
             # TODO add 'weduwe van Willem Janssen' in deaths
 
             # All usefull relations for NEO4j are processed before this point
-            if relative['Relation'] != 'No useful relation':
+            if relative['Relation'] == 'No useful relation':
                 relative['temporaryRelation'] = True
+            else:
+                relative['temporaryRelation'] = False
 
             # Estabilsh temp relations for preprocessing
             # Esteblish couples
@@ -160,9 +161,9 @@ def rebuild_people_indexes():
 
     indexes = []
     # indexes.append(IndexModel('pid', name='_pid'))
-    indexes.append(IndexModel('PersonName.PersonNameLastName', name= '_LastName'))
-    indexes.append(IndexModel('PersonName.PersonNameFirstName', name= '_FirstName'))
-    indexes.append(IndexModel('BirthPlace', name= '_BirthPlace'))
+    indexes.append(IndexModel('PersonNameLastName', name= '_LastName'))
+    indexes.append(IndexModel('PersonNameFirstName', name= '_FirstName'))
+    indexes.append(IndexModel('BirthPlace.Place', name= '_BirthPlace'))
     indexes.append(IndexModel('relatives.pid', name= '_RelativesPid'))
 
     # indexes.append(IndexModel('BirthDate', name= '_BirthDate'))
@@ -240,6 +241,7 @@ def process_collection(thrdName, collection):
         for analyzed_person in analyzed_people:
             if 'pid' in analyzed_person:
                 analyzed_person['_id'] = analyzed_person['pid']
+                del analyzed_person['temporaryRelation']
 
             stack.append(analyzed_person)
 
