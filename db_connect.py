@@ -9,28 +9,29 @@ pp = pprint.PrettyPrinter(indent=2)
 # Connect to the database
 def mongo_connect():
     client = MongoClient('mongodb://' + username() + ":" + password() + "@"  + ip() + ":" + str(port()) + '/')
-    bhic = client['bhic-databases']
+    bhic = client['local']
 
     # Load collections
-    births = bhic['civil-status-births-certificates']
-    baptisms = bhic['dtb-baptisms-certificates']
-    marriage_acts = bhic['civil-status-marriage-acts']
-    marriage_actions = bhic['dtb-marriage-actions']
-    deaths = bhic['civil-status-deaths']
-    death_actions = bhic['dtb-death-actions']
-    succession = bhic['memories-of-succession']
-    pop_registers = bhic['genealogical-population-registers']
-    military = bhic['military-register']
-    prison = bhic['prision-register']
+    succession = bhic['1-memories-of-succession']
+    baptisms = bhic['10-dtb-baptisms-certificates']
+    pop_registers = bhic['2-genealogical-population-registers']
+    births = bhic['3-civil-status-births-certificates']
+    marriage_acts = bhic['4-civil-status-marriage-acts']
+    deaths = bhic['5-civil-status-deaths']
+    military = bhic['6-military-register']
+    prison = bhic['7-prison-register']
+    marriage_actions = bhic['8-dtb-marriage-actions']
+    death_actions = bhic['9-dtb-death-actions']
     people = bhic['people']
     people_debug = bhic['people_debug']
     errors = bhic['errors']
 
     # Dict containing all collections of the original data source (as imported)
-    source_collections = {'births':births, 'baptisms':baptisms,
-    'marriage_acts':marriage_acts, 'marriage_actions':marriage_actions,
-    'deaths':deaths, 'death_actions':death_actions, 'succession':succession,
-    'pop_registers':pop_registers, 'military':military, 'prison':prison}
+    source_collections = {'3-civil-status-births-certificates':births, '10-dtb-baptisms-certificates':baptisms,
+                          '4-civil-status-marriage-acts':marriage_acts, '8-dtb-marriage-actions':marriage_actions,
+                          '5-civil-status-deaths':deaths, '9-dtb-death-actions':death_actions,
+                          '1-memories-of-succession':succession,'2-genealogical-population-registers':pop_registers,
+                          '6-military-register':military, '7-prison-register':prison}
 
     return {'client': client, 'bhic': bhic,
             'source_collections': source_collections,
