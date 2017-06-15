@@ -17,10 +17,11 @@ print_interval = 100000
 pp = pprint.PrettyPrinter(indent=2)
 exitFlag = 0
 
-if debugging == True:
+if debugging:
     write_table = 'people_debug'
 else:
     write_table = 'people'
+
 
 # Define thread
 class myThread(threading.Thread):
@@ -29,10 +30,12 @@ class myThread(threading.Thread):
         self.threadID = threadID
         self.name = name
         self.q = q
+
     def run(self):
         print("Starting " + self.name)
         process_collections(self.name, self.q)
         print("Exiting " + self.name)
+
 
 def process_collections(threadName, q):
     while not exitFlag:
@@ -44,6 +47,7 @@ def process_collections(threadName, q):
         else:
             queueLock.release()
             time.sleep(1)
+
 
 # This script tries to find if a person is male or female
 def gender_identifier(person):
@@ -62,12 +66,14 @@ def gender_identifier(person):
 
     # TODO Improve gender_identifier
 
+
 def analyze_person(person):
     gender_identifier(person)
     # get_approx_birthdate
     # other interesting stuff we can try to find
 
-def get_relatives(person_main, people):
+
+def get_relatives(person_main, people, Source):
     relatives = []
     for relative in people:
         # Check if the relative and the main person are not the same
@@ -144,11 +150,14 @@ def get_relatives(person_main, people):
 
             if relative['Relation'] != 'No useful relation':
                 relatives.append({'pid':relative['pid'],
-                                  'Relation':relative['Relation'], 'temporaryRelation':relative['temporaryRelation']})
+                                  'Relation':relative['Relation'], 'temporaryRelation':relative['temporaryRelation'],
+                                  'Date':Source['SourceIndexDate']})
             del relative['Relation']
+            del relative['temporaryRelation']
     # Only include relatives list if it contains elements
     if relatives:
         person_main['relatives'] = relatives
+
 
 def remove_people_indexes():
     try:
@@ -157,8 +166,8 @@ def remove_people_indexes():
     except:
         print('Index not available')
 
-def rebuild_people_indexes():
 
+def rebuild_people_indexes():
     indexes = []
     # indexes.append(IndexModel('pid', name='_pid'))
     indexes.append(IndexModel('PersonNameLastName', name= '_LastName'))
@@ -174,6 +183,7 @@ def rebuild_people_indexes():
                         name="_BirthDate"))
 
     mc[write_table].create_indexes(indexes)
+
 
 def save_to_db(stck):
     try:
@@ -193,6 +203,7 @@ def save_to_db(stck):
                     person['no_pid'] = True
                     mc['errors'].insert_one(person)
         print('Wrote batch with some errors')
+
 
 def date_formatter(dictionary):
     if 'Year' in dictionary:
@@ -215,6 +226,7 @@ def date_formatter(dictionary):
             return dictionary
     else:
         return dictionary
+
 
 # Process collections
 def process_collection(thrdName, collection):
@@ -241,7 +253,6 @@ def process_collection(thrdName, collection):
         for analyzed_person in analyzed_people:
             if 'pid' in analyzed_person:
                 analyzed_person['_id'] = analyzed_person['pid']
-                del analyzed_person['temporaryRelation']
 
             stack.append(analyzed_person)
 
@@ -263,6 +274,7 @@ def process_collection(thrdName, collection):
         print('Final write on collection:', collection, 'on', thrdName)
         save_to_db(stack)
         stack = []
+
 
 def analyze_people(people, relationEP, Source):
     analyzed_people = []
@@ -318,7 +330,7 @@ def analyze_people(people, relationEP, Source):
 
         for person in people:
             analyze_person(person)
-            get_relatives(person, people)
+            get_relatives(person, people, Source)
             person['Sources'] = [Source]
 
             # Flatten personName
