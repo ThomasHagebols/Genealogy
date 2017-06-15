@@ -8,7 +8,8 @@ debugging = False
 
 pp = pprint.PrettyPrinter(indent=2)
 
-q = queue.PriorityQueue()
+#q = queue.PriorityQueue()
+a=[]
 
 if debugging == True:
     read_table = 'people_debug'
@@ -23,6 +24,8 @@ def identify_people():
     for n, person in enumerate(mc[read_table].find({})):
         if n%100000==0:
             print(n)
+        if n>10000:
+            break
 
         #start with an empty query
         query = {}
@@ -75,9 +78,13 @@ def identify_people():
             
             #make sure that dublicates are not writen to main array        
             if (len(pids)>1):
-                print(1.0/len(pids))
-                q.put((1.0/len(pids),pids))
+                #print(1.0/len(pids))
+                #q.put((1.0/len(pids),pids))
+                a.append(pids)
 
 if __name__ == "__main__":
     identify_people()
+
+    with open('matches.json','w') as outfile:
+        json.dump(a, outfile)
 
