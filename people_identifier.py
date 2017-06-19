@@ -22,10 +22,8 @@ def identify_people():
     mc = mongo_connect()
 
     for n, person in enumerate(mc[read_table].find({})):
-        if n%100000==0:
+        if n%100==0:
             print(n)
-        if n>10000:
-            break
 
         #start with an empty query
         query = {}
@@ -61,7 +59,8 @@ def identify_people():
 
             #add Birthyear to the query
             query['BirthDate.Day'] = person['BirthDate'].get('Day')
-            
+
+            # print(query)
             #Find all the records according to the query
             results = mc[read_table].find(query)
 

@@ -1,5 +1,6 @@
 from db_connect import mongo_connect
 from nltk.metrics import *
+import pandas as pd
 import queue
 import threading
 import random
@@ -10,8 +11,8 @@ import pprint
 
 debugging = False
 dry_run = False
-read_table = 'people_debug'
-write_table = 'people_debug'
+read_table = 'people'
+write_table = 'people'
 maxAllowedDistanceLevenshtein = 2
 
 locked_documents = []
@@ -90,8 +91,6 @@ def relation_checker(relatives):
         person2 = mc[read_table].find_one({'_id': pids_relation[0][1]})
 
         if person1 is not None and person2 is not None:
-            # TODO Minimum edit distance of two strings (lastName and first name)
-            # TODO Pick the right name
             if pids_relation[1] in ['FatherOf', 'MotherOf']:
                 relatives_with_multiple_pids.append(pids_relation)
             else:
@@ -118,6 +117,18 @@ def relation_checker(relatives):
     return relatives_with_multiple_pids
 
 
+def remove_duplicates_in_relatives(relatives):
+    relatives_df = pd.DataFrame.from_dict(relatives)
+
+    max_val = relatives_df.groupby(['pid'], as_index=False).max()[['pid', 'Relation', 'temporaryRelation', 'DateTo']]
+    min_val = relatives_df.groupby(['pid'], as_index=False).min()[['pid', 'DateFrom']]
+
+    relatives_df = pd.merge(max_val, min_val, on='pid')
+
+    result = relatives_df.to_dict(orient='records')
+    return result
+
+
 def remove_links_to_old_pid(blk, pid1, pid2):
     for personWithDangingLinks in mc[read_table].find({'relatives.pid': pid2}):
         for relative in personWithDangingLinks['relatives']:
@@ -127,6 +138,8 @@ def remove_links_to_old_pid(blk, pid1, pid2):
                 # print(personWithDangingLinks['relatives'])
 
         # Remove duplicates
+        personWithDangingLinks['relatives'] = remove_duplicates_in_relatives(personWithDangingLinks['relatives'])
+
         # TODO Check if this works correctly
         personWithDangingLinks['relatives'] = [dict(tpl) for tpl in
                                                set([tuple(dct.items()) for dct in personWithDangingLinks['relatives']])]
@@ -186,6 +199,8 @@ def merge_person(q, t_name, pid1, pid2):
             for relative in person2[key]:
                 if relative not in person_merged[key]:
                     person_merged[key].append(relative)
+
+            person_merged[key] = remove_duplicates_in_relatives(person_merged[key])
         elif key == 'pid':
             person_merged[key] = person1[key]
         else:
@@ -210,8 +225,6 @@ def merge_person(q, t_name, pid1, pid2):
 
     # Find if there are relations with multiple pid's and check if they are the same person
     relatives_with_multiple_pids = relation_checker(person_merged['relatives'])
-
-    # TODO Remove duplicates
 
     # Recurse merge_person
     # print(relatives_with_multiple_pids)

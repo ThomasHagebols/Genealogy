@@ -17,10 +17,9 @@ print_interval = 100000
 pp = pprint.PrettyPrinter(indent=2)
 exitFlag = 0
 
-if debugging:
-    write_table = 'people_debug'
-else:
-    write_table = 'people'
+write_table = 'people_debug'
+
+
 
 
 # Define thread
@@ -151,7 +150,8 @@ def get_relatives(person_main, people, Source):
             if relative['Relation'] != 'No useful relation':
                 relatives.append({'pid':relative['pid'],
                                   'Relation':relative['Relation'], 'temporaryRelation':relative['temporaryRelation'],
-                                  'Date':Source['SourceIndexDate']})
+                                  'DateFrom':datetime.strptime(Source['SourceIndexDate']['From'], '%Y-%m-%d'),
+                                  'DateTo':datetime.strptime(Source['SourceIndexDate']['To'], '%Y-%m-%d')})
             del relative['Relation']
             del relative['temporaryRelation']
     # Only include relatives list if it contains elements
@@ -160,6 +160,7 @@ def get_relatives(person_main, people, Source):
 
 
 def remove_people_indexes():
+    mc = mongo_connect()
     try:
         mc[write_table].drop_indexes()
         print("All indexes in", write_table, "collection have been removed")
@@ -168,6 +169,7 @@ def remove_people_indexes():
 
 
 def rebuild_people_indexes():
+    mc = mongo_connect()
     indexes = []
     # indexes.append(IndexModel('pid', name='_pid'))
     indexes.append(IndexModel('PersonNameLastName', name= '_LastName'))
@@ -284,6 +286,7 @@ def analyze_people(people, relationEP, Source):
         people['RelationType'] = relationEP['RelationType']
         analyze_person(people)
         # get_approx_age
+        people['Sources'] = [Source]
         analyzed_people = [people]
     else:
         # We have multiple people or multiple relations as input
@@ -320,7 +323,6 @@ def analyze_people(people, relationEP, Source):
             'RelationType':relation['RelationType']})
 
         # Join temp with people
-        # TODO What if pid doesn't exist?
         d = defaultdict(dict)
         for l in (people, temp):
             for elem in l:
@@ -338,10 +340,6 @@ def analyze_people(people, relationEP, Source):
                 person.update({name_parts:person['PersonName'][name_parts]})
             del person['PersonName']
 
-            #
-
-            # TODO uncomment this thing when we have finished debugging
-            # del person['RelationType']
             analyzed_people.append(person)
 
     return analyzed_people
