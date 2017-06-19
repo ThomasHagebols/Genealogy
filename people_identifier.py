@@ -1,5 +1,5 @@
 from db_connect import mongo_connect
-import people_merger
+from people_merger import name_validation
 import pprint
 import json
 import queue as queue
@@ -7,6 +7,7 @@ import queue as queue
 debugging = False
 
 pp = pprint.PrettyPrinter(indent=2)
+maxAllowedDistanceLevenshtein = 2
 
 #q = queue.PriorityQueue()
 a=[]
@@ -18,13 +19,22 @@ else:
     read_table = 'people'
     write_table = 'people'
 
+def check_relative_match(main_person_relations, test_person_relations):
+    if None not in [main_person_relations, test_person_relations]:
+        for main_rel in main_person_relations:
+            for test_rel in test_person_relations:
+                if None not in [main_rel.get('FirstName'), main_rel.get('LastName'), test_rel.get('FirstName'), test_rel.get('LastName')]:
+                    if name_validation(main_rel.get('FirstName') + main_rel.get('LastName'),
+                                       test_rel.get('FirstName') + test_rel.get('LastName')):
+                        return True
+
+        return False
+
 def identify_people():
     mc = mongo_connect()
 
-    for n, person in enumerate(mc[read_table].find({})):
-        if n%100==0:
-            print(n)
-
+    subset = {'$or': [{'relatives':{'$exists': True}}, {'BirthDate': {'$exists': True}}]}
+    for n, person in enumerate(mc[read_table].find(subset)):
         #start with an empty query
         query = {}
 
@@ -52,13 +62,13 @@ def identify_people():
             query['PersonNameFirstName'] = FirstName
 
             #add BirthYear to the query
-            query['BirthDate.Year'] = person['BirthDate'].get('Year')
+            # query['BirthDate.Year'] = person['BirthDate'].get('Year')
 
             #add BirthMonth to the query
-            query['BirthDate.Month'] = person['BirthDate'].get('Month')
+            # query['BirthDate.Month'] = person['BirthDate'].get('Month')
 
             #add Birthyear to the query
-            query['BirthDate.Day'] = person['BirthDate'].get('Day')
+            # query['BirthDate.Day'] = person['BirthDate'].get('Day')
 
             # print(query)
             #Find all the records according to the query
@@ -73,13 +83,21 @@ def identify_people():
             #Loop results. Add pids to pid list
             for doc in results:
                 if doc['_id'] != person['_id']:
-                    pids.append(doc['_id'])
+                    if doc.get('BirthDate') == person.get('BirthDate') and None not in [doc.get('BirthDate'), person.get('BirthDate')]:
+                        pids.append(doc['_id'])
+                    elif check_relative_match(person.get('relatives'), doc.get('relatives')):
+                        pids.append(doc['_id'])
             
-            #make sure that dublicates are not writen to main array        
+            #make sure that dublicates are not writen to main array
             if (len(pids)>1):
                 #print(1.0/len(pids))
                 #q.put((1.0/len(pids),pids))
                 a.append(pids)
+
+        if n%100==0:
+            print(n)
+            print('Length of merge list:', len(a))
+
 
 if __name__ == "__main__":
     identify_people()

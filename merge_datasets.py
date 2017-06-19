@@ -17,9 +17,7 @@ print_interval = 100000
 pp = pprint.PrettyPrinter(indent=2)
 exitFlag = 0
 
-write_table = 'people_debug'
-
-
+write_table = 'people'
 
 
 # Define thread
@@ -148,10 +146,12 @@ def get_relatives(person_main, people, Source):
                 relative['Relation'] = 'ChildOf'
 
             if relative['Relation'] != 'No useful relation':
-                relatives.append({'pid':relative['pid'],
-                                  'Relation':relative['Relation'], 'temporaryRelation':relative['temporaryRelation'],
-                                  'DateFrom':datetime.strptime(Source['SourceIndexDate']['From'], '%Y-%m-%d'),
-                                  'DateTo':datetime.strptime(Source['SourceIndexDate']['To'], '%Y-%m-%d')})
+                relatives.append({'pid': relative['pid'], 'Relation': relative['Relation'],
+                                  'temporaryRelation': relative['temporaryRelation'],
+                                  'FirstName': relative.get('PersonNameFirstName'),
+                                  'LastName': relative.get('PersonNameLastName'),
+                                  'DateFrom': datetime.strptime(Source['SourceIndexDate']['From'], '%Y-%m-%d'),
+                                  'DateTo': datetime.strptime(Source['SourceIndexDate']['To'], '%Y-%m-%d')})
             del relative['Relation']
             del relative['temporaryRelation']
     # Only include relatives list if it contains elements
@@ -174,6 +174,9 @@ def rebuild_people_indexes():
     # indexes.append(IndexModel('pid', name='_pid'))
     indexes.append(IndexModel('PersonNameLastName', name= '_LastName'))
     indexes.append(IndexModel('PersonNameFirstName', name= '_FirstName'))
+    indexes.append(IndexModel([('PersonNameLastName', ASCENDING),
+                               ('PersonNameFirstName', ASCENDING)],
+                              name="_Name"))
     indexes.append(IndexModel('BirthPlace.Place', name= '_BirthPlace'))
     indexes.append(IndexModel('relatives.pid', name= '_RelativesPid'))
 
@@ -285,7 +288,13 @@ def analyze_people(people, relationEP, Source):
         # We have a single person as input
         people['RelationType'] = relationEP['RelationType']
         analyze_person(people)
-        # get_approx_age
+
+        # Flatten PersonName
+        for name_parts in people['PersonName']:
+            people.update({name_parts: people['PersonName'][name_parts]})
+        del people['PersonName']
+
+        # Add source
         people['Sources'] = [Source]
         analyzed_people = [people]
     else:
@@ -299,10 +308,6 @@ def analyze_people(people, relationEP, Source):
         # Check if both the people list and the relationEP list have the same length
         if len(people)!=len(relationEP):
             # TODO Check if lengths do not match
-            # if debugging == True:
-            #     print(len(people), len(relationEP))
-                # input("Press Enter to continue...")
-
             return analyzed_people
 
         # Make temp containing tuples of {pid:, RelationType:}
@@ -329,17 +334,16 @@ def analyze_people(people, relationEP, Source):
                 d[elem['pid']].update(elem)
         people = d.values()
 
+        # Flatten personName
+        for person in people:
+            for name_parts in person['PersonName']:
+                person.update({name_parts:person['PersonName'][name_parts]})
+            del person['PersonName']
 
         for person in people:
             analyze_person(person)
             get_relatives(person, people, Source)
             person['Sources'] = [Source]
-
-            # Flatten personName
-            for name_parts in person['PersonName']:
-                person.update({name_parts:person['PersonName'][name_parts]})
-            del person['PersonName']
-
             analyzed_people.append(person)
 
     return analyzed_people
