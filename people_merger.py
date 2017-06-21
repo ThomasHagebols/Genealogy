@@ -12,7 +12,7 @@ import pprint
 # TODO build lock!!!
 
 debugging = False
-dry_run = False
+dry_run = True
 read_table = 'people'
 write_table = 'people'
 maxAllowedDistanceLevenshtein = 2
@@ -57,7 +57,7 @@ def process_data(thread_name, q):
         queueLock.acquire()
         # TODO fix queue collision problem in a better way than we did here. Dirty hack
         # Queue can be jobs with [pid1, pid2, pid3] and let the thread split up the work
-        if not workQueue.empty() and (q.qsize() > 5000 or identifierFinished):
+        if not workQueue.empty() and (q.qsize() > 1 or identifierFinished):
             q_item = q.get()
             queueLock.release()
             try:
@@ -153,6 +153,7 @@ def identify_people(thread_name, q):
 
 
 def remove_duplicates_in_relatives(relatives):
+    start = time.time()
     # Convert date to int (workaround for out odf bounds error)
     for relative in relatives:
         relative['DateTo'] = int(datetime.strftime(relative['DateTo'],'%Y%m%d'))
@@ -172,6 +173,9 @@ def remove_duplicates_in_relatives(relatives):
     for relative in result:
         relative['DateTo'] = datetime.strptime(str(relative['DateTo']),'%Y%m%d')
         relative['DateFrom'] = datetime.strptime(str(relative['DateFrom']),'%Y%m%d')
+
+    if time.time()-start>1:
+        pass
 
     return result
 
@@ -196,7 +200,6 @@ def remove_links_to_old_pid(blk, pid1, pid2):
 
 
 def merge_person(q, t_name, pid1, pid2):
-    start = time.time()
     bulk = mc[write_table].initialize_ordered_bulk_op()
 
     # Get people from the database
@@ -208,7 +211,6 @@ def merge_person(q, t_name, pid1, pid2):
     if person1 is None or person2 is None:
         return
 
-    t1 = time.time()
     # Check where the information is contained person1 ->left, person2 -> right
     both = []
     left = []
@@ -223,8 +225,6 @@ def merge_person(q, t_name, pid1, pid2):
     for key in person2.keys():
         if key not in person1.keys():
             right.append(key)
-
-    t2 = time.time()
 
     # TODO Keep the most complete record
     person_merged = {}
@@ -263,26 +263,18 @@ def merge_person(q, t_name, pid1, pid2):
     for key in right:
         person_merged[key] = person2[key]
 
-    t3 = time.time()
-
     # Check for dangling links!!!
     remove_links_to_old_pid(bulk, pid1, pid2)
 
     bulk.find({'_id': pid1}).replace_one(person_merged)
     bulk.find({'_id': pid2}).remove()
 
-    t4 = time.time()
-
     if not dry_run:
         bulk.execute()
 
-    t5 = time.time()
-
-    print('Start:', t1 - start, 'Get keys', t2 - t1, 'Merge fields:', t3 - t2, 'Old links', t4 - t3, 'Write', t5 - t4)
-
 
 if __name__ == "__main__":
-    threadList = ['Thread-' + str(i) for i in range(0, 10)]
+    threadList = ['Thread-' + str(i) for i in range(0, 1)]
 
     queueLock = threading.Lock()
     workQueue = queue.PriorityQueue()
