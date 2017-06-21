@@ -12,7 +12,7 @@ import pprint
 # TODO build lock!!!
 
 debugging = False
-dry_run = True
+dry_run = False
 read_table = 'people'
 write_table = 'people'
 maxAllowedDistanceLevenshtein = 2
@@ -57,7 +57,7 @@ def process_data(thread_name, q):
         queueLock.acquire()
         # TODO fix queue collision problem in a better way than we did here. Dirty hack
         # Queue can be jobs with [pid1, pid2, pid3] and let the thread split up the work
-        if not workQueue.empty() and (q.qsize() > 1 or identifierFinished):
+        if not workQueue.empty() and (q.qsize() > 5000 or identifierFinished):
             q_item = q.get()
             queueLock.release()
             try:
@@ -270,7 +270,7 @@ def merge_person(q, t_name, pid1, pid2):
 
 
 if __name__ == "__main__":
-    threadList = ['Thread-' + str(i) for i in range(0, 1)]
+    threadList = ['Thread-' + str(i) for i in range(0, 10)]
 
     queueLock = threading.Lock()
     workQueue = queue.PriorityQueue()
