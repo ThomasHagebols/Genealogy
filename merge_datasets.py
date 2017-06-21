@@ -146,6 +146,10 @@ def get_relatives(person_main, people, Source):
                 relative['Relation'] = 'ChildOf'
 
             if relative['Relation'] != 'No useful relation':
+                # TODO build better solution for workaround for when a name is missing.
+                if None in (relative.get('PersonNameFirstName')):
+                    relative['PersonNameFirstName'] = 'NN'
+                    relative['PersonNameLastName'] = 'NN'
                 relatives.append({'pid': relative['pid'], 'Relation': relative['Relation'],
                                   'temporaryRelation': relative['temporaryRelation'],
                                   'FirstName': relative.get('PersonNameFirstName'),

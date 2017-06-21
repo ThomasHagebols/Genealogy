@@ -1,13 +1,15 @@
 from db_connect import mongo_connect
 from nltk.metrics import *
+from datetime import datetime
 import pandas as pd
+import random
 import queue
 import threading
-import random
 import time
-import json
 import itertools
 import pprint
+
+# TODO build lock!!!
 
 debugging = False
 dry_run = False
@@ -15,14 +17,28 @@ read_table = 'people'
 write_table = 'people'
 maxAllowedDistanceLevenshtein = 2
 
-locked_documents = []
 pp = pprint.PrettyPrinter(indent=2)
-exitflag = 0
+
 count = 0
+
+exitflag = False
+identifierFinished = False
 mc = mongo_connect()
 
+class IdentifyThread (threading.Thread):
+    def __init__(self, threadID, name, q):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.q = q
 
-class myThread (threading.Thread):
+    def run(self):
+        print("Starting " + self.name)
+        identify_people(self.name, self.q)
+        print("Exiting " + self.name)
+
+
+class MergeThread (threading.Thread):
     def __init__(self, threadID, name, q):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -37,30 +53,27 @@ class myThread (threading.Thread):
 
 def process_data(thread_name, q):
     global count
-    global n_data
     while not exitflag:
         queueLock.acquire()
-        if not workQueue.empty():
+        # TODO fix queue collision problem in a better way than we did here. Dirty hack
+        # Queue can be jobs with [pid1, pid2, pid3] and let the thread split up the work
+        if not workQueue.empty() and (q.qsize() > 5000 or identifierFinished):
             q_item = q.get()
             queueLock.release()
             try:
-                print(thread_name, count, '/', n_data)
-                merge_person(q, thread_name, q_item[0], q_item[1])
+                print(thread_name, 'Merge:', count, 'Queue size:', q.qsize())
+                merge_person(q, thread_name, q_item[1][0], q_item[1][1])
                 count += 1
-            except:
+            except Exception as e:
                 queueLock.acquire()
-                q.put(q_item)
+                q.put((random.random(), (q_item[1][0], q_item[1][1])))
                 queueLock.release()
                 time.sleep(1)
-                print('error')
+                print('error with ', q_item[1])
+                print(e)
         else:
             queueLock.release()
-        time.sleep(0.1)
-
-
-# Check if the roles are married parents
-def is_married_parent(role1, role2):
-    return True if role1 in ['HasChildWith', 'MarriedTo'] and role2 in ['HasChildWith', 'MarriedTo'] else False
+        time.sleep(0.05)
 
 
 # Calculate if a name is roughly the same using Levenshtein
@@ -71,61 +84,95 @@ def name_validation(string1, string2):
         return True if edit_distance(string1, string2) <= maxAllowedDistanceLevenshtein else False
 
 
-# TODO Lock documents before writing
-def relation_checker(relatives):
-    relations_with_multiple_pids = []
-    # Do a cartesian product where relation[0] == relation[1] and pid[0[!=pid[1]
-    for i in itertools.product(relatives, relatives):
-        if (i[0]['Relation'] == i[1]['Relation'] or is_married_parent(i[0]['Relation'], i[1]['Relation'])) and i[0]['pid'] != i[1]['pid']:
-            pid_pair = [i[0]['pid'], i[1]['pid']]
-            pid_pair.sort()
-            pid_pair = tuple(pid_pair)
-            relations_with_multiple_pids.append((pid_pair, i[0]['Relation']))
+def check_relative_match(main_person_relations, test_person_relations):
+    if None not in [main_person_relations, test_person_relations]:
+        for main_rel in main_person_relations:
+            for test_rel in test_person_relations:
+                if None not in [main_rel.get('FirstName'), main_rel.get('LastName'), test_rel.get('FirstName'),
+                                test_rel.get('LastName')]:
+                    if name_validation(str(main_rel.get('FirstName')) + str(main_rel.get('LastName')),
+                                       str(test_rel.get('FirstName')) + str(test_rel.get('LastName'))):
+                        return True
 
-    # remove duplicates
-    relations_with_multiple_pids = list(set(relations_with_multiple_pids))
+        return False
 
-    relatives_with_multiple_pids = []
-    for pids_relation in relations_with_multiple_pids:
-        person1 = mc[read_table].find_one({'_id': pids_relation[0][0]})
-        person2 = mc[read_table].find_one({'_id': pids_relation[0][1]})
 
-        if person1 is not None and person2 is not None:
-            if pids_relation[1] in ['FatherOf', 'MotherOf']:
-                relatives_with_multiple_pids.append(pids_relation)
-            else:
-                match_first_name = name_validation(person1.get('PersonNameLastName'), person2.get('PersonNameLastName'))
-                match_last_name = name_validation(person1.get('PersonNameFirstName'),
-                                                  person2.get('PersonNameFirstName'))
+def identify_people(thread_name, q):
+    global identifierFinished
+    mc = mongo_connect()
 
-                if match_first_name and match_last_name and \
-                                None not in [person1.get('PersonNameLastName'), person2.get('PersonNameLastName'),
-                                             person1.get('PersonNameFirstName'), person2.get('PersonNameFirstName')]:
-                    relatives_with_multiple_pids.append(pids_relation)
-                    if debugging:
-                        print('match')
-                        print(pids_relation[0][0], person1.get('PersonNameLastName'),
-                              person1.get('PersonNameFirstName'))
-                        print(pids_relation[0][1], person2.get('PersonNameLastName'),
-                              person2.get('PersonNameFirstName'))
-                else:
-                    if debugging:
-                        print('No match:', pids_relation[0][0], person1.get('PersonNameLastName'),
-                              person1.get('PersonNameFirstName'))
-                        print('No match:', pids_relation[0][1], person2.get('PersonNameLastName'),
-                              person2.get('PersonNameFirstName'))
-    return relatives_with_multiple_pids
+    nr_of_jobs = 0
+    subset = {'$or': [{'relatives': {'$exists': True}}, {'BirthDate': {'$exists': True}}]}
+    for n, person in enumerate(mc[read_table].find(subset).batch_size(100)):
+        # start with an empty query
+        query = {}
+
+        LastName = person.get('PersonNameLastName')
+        FirstName = person.get('PersonNameFirstName')
+
+        if None not in (FirstName, LastName):
+            query['PersonNameLastName'] = person.get('PersonNameLastName')
+            query['PersonNameFirstName'] = person.get('PersonNameFirstName')
+
+            # Find all the records according to the query
+            results = mc[read_table].find(query)
+
+            # Empty array to store the pids of the records found by the query
+            work = []
+
+            # Loop results. Add pids to pid list
+            # print(person['PersonNameLastName'], person['PersonNameFirstName'], person['pid'], person['BirthDate'])
+            for doc in results:
+                if doc['_id'] != person['_id']:
+                    # Check if birthdates match
+                    if doc.get('BirthDate') == person.get('BirthDate') and None not in [doc.get('BirthDate'),
+                                                                                        person.get('BirthDate')]:
+                        if None not in (person['BirthDate'].get('Year'), person['BirthDate'].get('Month'),
+                                        person['BirthDate'].get('Day')):
+                            work.append((person['_id'], doc['_id']))
+                            # print(doc['PersonNameLastName'], doc['PersonNameFirstName'], doc['pid'], doc['BirthDate'])
+
+                    # Check if we can derive that we identified a person using relatives
+                    elif check_relative_match(person.get('relatives'), doc.get('relatives')):
+                        work.append((person['_id'], doc['_id']))
+                        # print(doc['PersonNameLastName'], doc['PersonNameFirstName'], doc['pid'], doc['BirthDate'])
+            # print('\n')
+
+            # build actual queue
+            queueLock.acquire()
+            for pair in work:
+                # print('Adding to queue:', pair)
+                workQueue.put((random.random(), pair))
+                nr_of_jobs += 1
+            queueLock.release()
+
+        if n % 100 == 0:
+            print('Currently identifying doc', n, 'Length of merge list:', nr_of_jobs)
+
+    identifierFinished = True
 
 
 def remove_duplicates_in_relatives(relatives):
+    # Convert date to int (workaround for out odf bounds error)
+    for relative in relatives:
+        relative['DateTo'] = int(datetime.strftime(relative['DateTo'],'%Y%m%d'))
+        relative['DateFrom'] = int(datetime.strftime(relative['DateFrom'],'%Y%m%d'))
+
     relatives_df = pd.DataFrame.from_dict(relatives)
 
-    max_val = relatives_df.groupby(['pid'], as_index=False).max()[['pid', 'Relation', 'temporaryRelation', 'DateTo']]
+    max_val = relatives_df.groupby(['pid'], as_index=False).max()[['pid', 'Relation', 'temporaryRelation', 'FirstName',
+                                                                   'LastName', 'DateTo']]
     min_val = relatives_df.groupby(['pid'], as_index=False).min()[['pid', 'DateFrom']]
 
     relatives_df = pd.merge(max_val, min_val, on='pid')
 
     result = relatives_df.to_dict(orient='records')
+
+    # Convert int to date
+    for relative in result:
+        relative['DateTo'] = datetime.strptime(str(relative['DateTo']),'%Y%m%d')
+        relative['DateFrom'] = datetime.strptime(str(relative['DateFrom']),'%Y%m%d')
+
     return result
 
 
@@ -149,6 +196,7 @@ def remove_links_to_old_pid(blk, pid1, pid2):
 
 
 def merge_person(q, t_name, pid1, pid2):
+    start = time.time()
     bulk = mc[write_table].initialize_ordered_bulk_op()
 
     # Get people from the database
@@ -160,6 +208,7 @@ def merge_person(q, t_name, pid1, pid2):
     if person1 is None or person2 is None:
         return
 
+    t1 = time.time()
     # Check where the information is contained person1 ->left, person2 -> right
     both = []
     left = []
@@ -174,6 +223,8 @@ def merge_person(q, t_name, pid1, pid2):
     for key in person2.keys():
         if key not in person1.keys():
             right.append(key)
+
+    t2 = time.time()
 
     # TODO Keep the most complete record
     person_merged = {}
@@ -191,8 +242,6 @@ def merge_person(q, t_name, pid1, pid2):
                 person_merged[key] = person1[key]
         elif key == 'relatives':
             person_merged[key] = []
-            # TODO Check for double links after merge
-
             for relative in person1[key]:
                 person_merged[key].append(relative)
 
@@ -214,78 +263,48 @@ def merge_person(q, t_name, pid1, pid2):
     for key in right:
         person_merged[key] = person2[key]
 
-    # # Check for dangling links!!!
+    t3 = time.time()
+
+    # Check for dangling links!!!
     remove_links_to_old_pid(bulk, pid1, pid2)
 
     bulk.find({'_id': pid1}).replace_one(person_merged)
     bulk.find({'_id': pid2}).remove()
 
+    t4 = time.time()
+
     if not dry_run:
         bulk.execute()
 
-    # Find if there are relations with multiple pid's and check if they are the same person
-    relatives_with_multiple_pids = relation_checker(person_merged['relatives'])
+    t5 = time.time()
 
-    # Recurse merge_person
-    # print(relatives_with_multiple_pids)
-    for relative in relatives_with_multiple_pids:
-        try:
-            merge_person(q, t_name, relative[0][0], relative[0][1])
-        except:
-            queueLock.acquire()
-            q.put((relative[0][0], relative[0][1]))
-            queueLock.release()
-            time.sleep(1)
-            print('error')
-
-
-def build_queue(dta):
-    n_dta = 0
-    work = []
-    for pid_group in dta:
-        while len(pid_group) > 1:
-            work.append((pid_group[0], pid_group[1]))
-            del pid_group[1]
-
-    # Scramble work
-    random.shuffle(work)
-
-    # build actual queue
-    queueLock.acquire()
-    for pair in work:
-        n_dta += 1
-        workQueue.put(pair)
-    queueLock.release()
-
-    return n_dta
+    print('Start:', t1 - start, 'Get keys', t2 - t1, 'Merge fields:', t3 - t2, 'Old links', t4 - t3, 'Write', t5 - t4)
 
 
 if __name__ == "__main__":
-    threadList = ['Thread-' + str(i) for i in range(0, 30)]
+    threadList = ['Thread-' + str(i) for i in range(0, 10)]
 
     queueLock = threading.Lock()
-    workQueue = queue.Queue()
+    workQueue = queue.PriorityQueue()
     threads = []
     threadID = 1
 
     # Create new threads
+    thread = IdentifyThread(threadID, 'Identify-thread', workQueue)
+    thread.start()
+    threads.append(thread)
+    threadID += 1
+
+    # Create merge thread
     for tName in threadList:
-        thread = myThread(threadID, tName, workQueue)
+        thread = MergeThread(threadID, tName, workQueue)
         thread.start()
         threads.append(thread)
         threadID += 1
 
-    with open('matches.json') as data_file:
-        data = json.load(data_file)
-
-
-
-    # Build a scrambled queue
-    n_data = build_queue(data)
-
     # Wait for queue to empty
-    while not workQueue.empty():
-        pass
+    while not identifierFinished or not workQueue.empty():
+        time.sleep(10)
 
     # Notify threads it's time to exit
-    exitflag = 1
+    exitflag = True

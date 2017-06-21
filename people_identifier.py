@@ -1,16 +1,15 @@
 from db_connect import mongo_connect
-from people_merger import name_validation
+from nltk.metrics import *
 import pprint
 import json
-import queue as queue
+import queue
+import threading
+
 
 debugging = False
 
 pp = pprint.PrettyPrinter(indent=2)
 maxAllowedDistanceLevenshtein = 2
-
-#q = queue.PriorityQueue()
-a=[]
 
 if debugging == True:
     read_table = 'people_debug'
@@ -18,6 +17,15 @@ if debugging == True:
 else:
     read_table = 'people'
     write_table = 'people'
+
+
+# Calculate if a name is roughly the same using Levenshtein
+def name_validation(string1, string2):
+    if None in [string1, string2]:
+        return False
+    else:
+        return True if edit_distance(string1, string2) <= maxAllowedDistanceLevenshtein else False
+
 
 def check_relative_match(main_person_relations, test_person_relations):
     if None not in [main_person_relations, test_person_relations]:
@@ -30,78 +38,80 @@ def check_relative_match(main_person_relations, test_person_relations):
 
         return False
 
-def identify_people():
+
+def identify_people(thread_name, q):
     mc = mongo_connect()
 
+    nr_of_jobs = 0
     subset = {'$or': [{'relatives':{'$exists': True}}, {'BirthDate': {'$exists': True}}]}
     for n, person in enumerate(mc[read_table].find(subset)):
-        #start with an empty query
+        # start with an empty query
         query = {}
 
-        #Get values of mandatory fields
+        # Get values of mandatory fields
 
-        #CheckLastName becomes None if 'PersonNameLastName' does not exist
+        # CheckLastName becomes None if 'PersonNameLastName' does not exist
         LastName = person.get('PersonNameLastName')
 
-        #CheckFirstName becomes None if 'PersonNameFirstName' does not exist
+        # CheckFirstName becomes None if 'PersonNameFirstName' does not exist
         FirstName = person.get('PersonNameFirstName')
 
-        #CheckBirthDate becomes None if 'BirthDate' does not exist
+        # CheckBirthDate becomes None if 'BirthDate' does not exist
         BirthDate = person.get('BirthDate')
 
-        #If we don't have all the mandatory fields, we go to next loop iteration.
-        #Otherwise we start to build query
+        # If we don't have all the mandatory fields, we go to next loop iteration.
+        # Otherwise we start to build query
         if None not in (FirstName, LastName, BirthDate):
 
-            #--add Mandatory fields--
+            # --add Mandatory fields--
 
-            #add LastName to the query
+            # add LastName to the query
             query['PersonNameLastName'] = LastName
 
-            #add FirstName to the query
+            # add FirstName to the query
             query['PersonNameFirstName'] = FirstName
 
-            #add BirthYear to the query
-            # query['BirthDate.Year'] = person['BirthDate'].get('Year')
-
-            #add BirthMonth to the query
-            # query['BirthDate.Month'] = person['BirthDate'].get('Month')
-
-            #add Birthyear to the query
-            # query['BirthDate.Day'] = person['BirthDate'].get('Day')
-
             # print(query)
-            #Find all the records according to the query
+            # Find all the records according to the query
             results = mc[read_table].find(query)
 
-            #Empty array to store the pids of the records found by the query
-            pids = []
-            
-            #append persons ID to first index of list
-            pids.append(person['_id'])
+            # Empty array to store the pids of the records found by the query
+            work = []
 
-            #Loop results. Add pids to pid list
+            # Loop results. Add pids to pid list
+            # print(person['PersonNameLastName'], person['PersonNameFirstName'], person['pid'], person['BirthDate'])
             for doc in results:
                 if doc['_id'] != person['_id']:
+                    # Check if birthdates match
                     if doc.get('BirthDate') == person.get('BirthDate') and None not in [doc.get('BirthDate'), person.get('BirthDate')]:
-                        pids.append(doc['_id'])
+                        # TODO make birthdate more granular
+                        if None not in (person['BirthDate'].get('Year'), person['BirthDate'].get('Month'), person['BirthDate'].get('Day')):
+                            work.append((person['_id'], doc['_id']))
+                            # print(doc['PersonNameLastName'], doc['PersonNameFirstName'], doc['pid'], doc['BirthDate'])
+                    # Check if we can derive that we identified a person using relatices
                     elif check_relative_match(person.get('relatives'), doc.get('relatives')):
-                        pids.append(doc['_id'])
+                        work.append((person['_id'], doc['_id']))
+                        # print(doc['PersonNameLastName'], doc['PersonNameFirstName'], doc['pid'], doc['BirthDate'])
+            # print('\n')
             
-            #make sure that dublicates are not writen to main array
-            if (len(pids)>1):
-                #print(1.0/len(pids))
-                #q.put((1.0/len(pids),pids))
-                a.append(pids)
+            # make sure that dublicates are not writen to main array
+            # print(work)
 
-        if n%100==0:
+            # build actual queue
+            queueLock.acquire()
+            for pair in work:
+                workQueue.put(pair)
+                nr_of_jobs +=1
+            queueLock.release()
+
+        if n % 100 == 0:
             print(n)
-            print('Length of merge list:', len(a))
+            print('Processing job', n, 'Length of merge list:', nr_of_jobs)
 
 
 if __name__ == "__main__":
-    identify_people()
+    queueLock = threading.Lock()
+    workQueue = queue.Queue()
 
-    with open('matches.json','w') as outfile:
-        json.dump(a, outfile)
+    identify_people('Identify-thread', workQueue)
 
