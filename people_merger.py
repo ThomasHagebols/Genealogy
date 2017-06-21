@@ -6,10 +6,8 @@ import random
 import queue
 import threading
 import time
-import itertools
 import pprint
 
-# TODO build lock!!!
 
 debugging = False
 dry_run = False
@@ -25,6 +23,7 @@ exitflag = False
 identifierFinished = False
 mc = mongo_connect()
 
+
 class IdentifyThread (threading.Thread):
     def __init__(self, threadID, name, q):
         threading.Thread.__init__(self)
@@ -34,7 +33,7 @@ class IdentifyThread (threading.Thread):
 
     def run(self):
         print("Starting " + self.name)
-        identify_people(self.name, self.q)
+        identify_people()
         print("Exiting " + self.name)
 
 
@@ -60,20 +59,34 @@ def process_data(thread_name, q):
         if not workQueue.empty() and (q.qsize() > 5000 or identifierFinished):
             q_item = q.get()
             queueLock.release()
-            try:
-                print(thread_name, 'Merge:', count, 'Queue size:', q.qsize())
-                merge_person(q, thread_name, q_item[1][0], q_item[1][1])
-                count += 1
-            except Exception as e:
-                queueLock.acquire()
-                q.put((random.random(), (q_item[1][0], q_item[1][1])))
-                queueLock.release()
-                time.sleep(1)
-                print('error with ', q_item[1])
-                print(e)
+
+            # Split merging of multiple documents in pairwise merges
+            work = split_job(q_item[1])
+
+            for job in work:
+                try:
+                    print(thread_name, 'Merge:', count, 'Queue size:', q.qsize())
+                    merge_person(q, thread_name, job[0], job[1])
+                    count += 1
+                except Exception as e:
+                    queueLock.acquire()
+                    q.put((random.random(), [job[0], job[1]]))
+                    queueLock.release()
+                    time.sleep(1)
+                    print('error with ', job)
+                    print(e)
         else:
             queueLock.release()
         time.sleep(0.05)
+
+
+def split_job(queue_job):
+    work = []
+    while len(queue_job) > 1:
+        work.append((queue_job[0], queue_job[1]))
+        del queue_job[1]
+
+    return work
 
 
 # Calculate if a name is roughly the same using Levenshtein
@@ -97,7 +110,7 @@ def check_relative_match(main_person_relations, test_person_relations):
         return False
 
 
-def identify_people(thread_name, q):
+def identify_people():
     global identifierFinished
     mc = mongo_connect()
 
@@ -118,7 +131,7 @@ def identify_people(thread_name, q):
             results = mc[read_table].find(query)
 
             # Empty array to store the pids of the records found by the query
-            work = []
+            work = [person['_id']]
 
             # Loop results. Add pids to pid list
             # print(person['PersonNameLastName'], person['PersonNameFirstName'], person['pid'], person['BirthDate'])
@@ -129,20 +142,19 @@ def identify_people(thread_name, q):
                                                                                         person.get('BirthDate')]:
                         if None not in (person['BirthDate'].get('Year'), person['BirthDate'].get('Month'),
                                         person['BirthDate'].get('Day')):
-                            work.append((person['_id'], doc['_id']))
+                            work.append(doc['_id'])
                             # print(doc['PersonNameLastName'], doc['PersonNameFirstName'], doc['pid'], doc['BirthDate'])
 
                     # Check if we can derive that we identified a person using relatives
                     elif check_relative_match(person.get('relatives'), doc.get('relatives')):
-                        work.append((person['_id'], doc['_id']))
+                        work.append(doc['_id'])
                         # print(doc['PersonNameLastName'], doc['PersonNameFirstName'], doc['pid'], doc['BirthDate'])
             # print('\n')
 
             # build actual queue
             queueLock.acquire()
-            for pair in work:
-                # print('Adding to queue:', pair)
-                workQueue.put((random.random(), pair))
+            if len(work) > 1:
+                workQueue.put((random.random(), work))
                 nr_of_jobs += 1
             queueLock.release()
 
