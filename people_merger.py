@@ -153,7 +153,6 @@ def identify_people(thread_name, q):
 
 
 def remove_duplicates_in_relatives(relatives):
-    start = time.time()
     # Convert date to int (workaround for out odf bounds error)
     for relative in relatives:
         relative['DateTo'] = int(datetime.strftime(relative['DateTo'],'%Y%m%d'))
@@ -173,9 +172,6 @@ def remove_duplicates_in_relatives(relatives):
     for relative in result:
         relative['DateTo'] = datetime.strptime(str(relative['DateTo']),'%Y%m%d')
         relative['DateFrom'] = datetime.strptime(str(relative['DateFrom']),'%Y%m%d')
-
-    if time.time()-start>1:
-        pass
 
     return result
 
