@@ -1,0 +1,2 @@
+python people_merger.py
+pause

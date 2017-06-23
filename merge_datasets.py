@@ -146,16 +146,21 @@ def get_relatives(person_main, people, Source):
                 relative['Relation'] = 'ChildOf'
 
             if relative['Relation'] != 'No useful relation':
-                # TODO build better solution for workaround for when a name is missing.
-                if None in (relative.get('PersonNameFirstName')):
-                    relative['PersonNameFirstName'] = 'NN'
-                    relative['PersonNameLastName'] = 'NN'
-                relatives.append({'pid': relative['pid'], 'Relation': relative['Relation'],
+                temp = {'pid': relative['pid'], 'Relation': relative['Relation'],
                                   'temporaryRelation': relative['temporaryRelation'],
-                                  'FirstName': relative.get('PersonNameFirstName'),
-                                  'LastName': relative.get('PersonNameLastName'),
                                   'DateFrom': datetime.strptime(Source['SourceIndexDate']['From'], '%Y-%m-%d'),
-                                  'DateTo': datetime.strptime(Source['SourceIndexDate']['To'], '%Y-%m-%d')})
+                                  'DateTo': datetime.strptime(Source['SourceIndexDate']['To'], '%Y-%m-%d')}
+
+                # Add first name if available
+                if relative.get('PersonNameFirstName'):
+                    temp['FirstName'] = relative['PersonNameFirstName']
+
+                # Add laast name if available
+                if relative.get('PersonNameLastName'):
+                    temp['LastName'] = relative['PersonNameLastName']
+
+                relatives.append(temp)
+
             del relative['Relation']
             del relative['temporaryRelation']
     # Only include relatives list if it contains elements
@@ -294,8 +299,9 @@ def analyze_people(people, relationEP, Source):
         analyze_person(people)
 
         # Flatten PersonName
-        for name_parts in people['PersonName']:
-            people.update({name_parts: people['PersonName'][name_parts]})
+        for name_part in people['PersonName']:
+            if str.upper(people['PersonName'][name_part]) not in ['NN', 'N.N', 'N.N.']:
+                people.update({name_part: people['PersonName'][name_part]})
         del people['PersonName']
 
         # Add source
@@ -340,8 +346,9 @@ def analyze_people(people, relationEP, Source):
 
         # Flatten personName
         for person in people:
-            for name_parts in person['PersonName']:
-                person.update({name_parts:person['PersonName'][name_parts]})
+            for name_part in person['PersonName']:
+                if str.upper(name_part) not in ['NN', 'N.N', 'N.N.']:
+                    person.update({name_part:person['PersonName'][name_part]})
             del person['PersonName']
 
         for person in people:
